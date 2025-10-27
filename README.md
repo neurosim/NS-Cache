@@ -56,6 +56,7 @@ make clean -C src/
 
 (3) Trying to add your own technology parameters? Try using `Technology.cpp` and `Technology.h` to add your own parasitics, and current density charecteristics.
 
+### Other
 If you have logistic questions or comments, please contact :man: [Prof. Shimeng Yu](mailto:shimeng.yu@ece.gatech.edu), and if you have technical questions or comments, please contact :man: [Faaiq Waqar](mailto:faaiq.waqar@gatech.edu) or :man: [Junmo Lee](mailto:junmolee@gatech.edu) or :man: [Ming-Yen Lee](mailto:mlee838@gatech.edu).
 
 This research is supported by the PRISM and CHIMES centers (SRC/DARPA JUMP 2.0).
