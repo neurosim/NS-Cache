@@ -1,0 +1,202 @@
+/*******************************************************************************
+* Copyright (c) 2015-2024
+* School of Electrical, Computer and Energy Engineering, Georgia Institute of Technology
+* PI: Prof. Shimeng Yu
+* All rights reserved.
+*
+* This source code is part of NeuroSim - a device-circuit-algorithm framework to benchmark
+* neuro-inspired architectures with synaptic devices(e.g., SRAM and emerging non-volatile memory).
+* Copyright of the model is maintained by the developers, and the model is distributed under
+* the terms of the Creative Commons Attribution-NonCommercial 4.0 International Public License
+* http://creativecommons.org/licenses/by-nc/4.0/legalcode.
+* The source code is free and you can redistribute and/or modify it
+* by providing that the following conditions are met:
+*
+*  (1) Redistributions of source code must retain the above copyright notice,
+*     this list of conditions and the following disclaimer.
+*
+*  (2) Redistributions in binary form must reproduce the above copyright notice,
+*     this list of conditions and the following disclaimer in the documentation
+*     and/or other materials provided with the distribution.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+* ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*
+* Developer list:
+*   Faaiq Waqar	    Email: fwaqar3 at gatech dot edu
+********************************************************************************/
+
+machine(MachineType:RegionBuffer, "Forwarding Buffer for L3 Refresh Control")
+: Cycles l3_increment_latency := 1;
+Cycles l3_refresh_period := 35;
+Cycles l3_refresh_latency := 5;
+
+// Add incoming port for refresh start/stop Requests
+MessageBuffer * refresh_mod network="From", virtual_network="8", vnet_type="request";
+
+// Add incoming port for incoming CPU Requests to the L3 Cache
+MessageBuffer * fromCPU network="From", virtual_network="2", vnet_type="response";
+
+// Add outgoing port for forwarded CPU Requests to the L3 Cache
+MessageBuffer * toL3Cache network="To", virtual_network="5", vnet_type="response"
+{
+    Tick clockEdge();
+
+    Entry getCacheEntry(Addr addr), return_by_pointer="yes" {
+        return static_cast(Entry, "pointer", L3cache.lookup(addr));
+    }
+
+    AccessPermission checkL3Entry(Addr addr) {
+        Entry cache_entry := getCacheEntry(addr);
+        if(is_valid(cache_entry)) {
+          return AccessPermission:Present;
+        }
+        return AccessPermission:NotPresent;
+    }
+
+    // EVENTS
+    enumeration(Event, desc="L3 Forwarding Events") {
+    // Requests coming from the Cores
+    RefStart,                desc="Begin L3 Cache Refresh";
+    RefStop,                 desc="End L3 Cache Refresh";
+    Forward,                 desc="Forward CPU packet to L3 Controller";
+    }
+
+    state_declaration(State, desc="Forward Control States"){
+        R_n, AccessPermission:Read_Write, desc="Not in refresh, send packets as usual";
+        R,   AccessPermission:Busy, desc="In refresh, buffer packets and send forward after"
+    }
+
+    enumeration(ResponseType, desc="To communicate stats from transitions to recordStats") {
+        DataArrayRead,    desc="Read the data array";
+        DataArrayWrite,   desc="Write the data array";
+        TagArrayRead,     desc="Read the data array";
+        TagArrayWrite,    desc="Write the data array";
+    }
+
+    // OUT PORTS
+    out_port(toL3Cache_out, CPURequestMsg, toL3Cache);
+
+    // IN PORTS
+    in_port(fromCPU_in, CPURequestMsg, fromCPU){
+        if (fromCPU_in.isReady(clockEdge())) {
+            peek(fromCPU_in, CPURequestMsg) {
+                Addr refAddr := static_cast(Addr, "value", 0x0)
+                trigger(Event:Forward, refAddr);
+            }
+        }
+    }
+
+    in_port(refresh_mod_in, ResponseMsg, refresh_mod){
+        if (refresh_mod_in.isReady(clockEdge())) {
+            peek(refresh_mod_in, ResponseMsg) {
+                Addr refAddr := static_cast(Addr, "value", 0x0)
+                if(in_msg.Type == CoherenceRequestType:StartRF){
+                    trigger(Event:StartRF, refAddr);
+                } else {
+                    trigger(Event:StopRF, refAddr);
+                }
+            }
+        }
+    }
+
+    // BEGIN ACTIONS
+
+    action(f_forwardCPUPacket, "f", desc="forward information from the CPU") {
+        peek(fromCPU_in, CPURequestMsg) {
+            DPRINTF(RubySlicc, "forwarding a message out of refresh\n");
+            enqueue(requestToDir_out, CPURequestMsg, 0) {
+                out_msg.addr := in_msg.addr;
+                out_msg.DemandAddress := in_msg.DemandAddress;
+                out_msg.Type := in_msg.Type;
+                out_msg.DataBlk := in_msg.DataBlk;
+                out_msg.Dirty := in_msg.Dirty;
+                out_msg.Requestor := in_msg.Requestor;
+                out_msg.Destination := in_msg.Destination;
+                out_msg.Shared := in_msg.Shared;
+                out_msg.MessageSize := in_msg.MessageSize;
+                out_msg.InitialRequestTime := in_msg.InitialRequestTime;
+                out_msg.ForwardRequestTime := in_msg.ForwardRequestTime;
+                out_msg.ProbeRequestStartTime := in_msg.ProbeRequestStartTime;
+                out_msg.DemandRequest := in_msg.DemandRequest;
+                out_msg.Sharers := in_msg.Sharers;
+                out_msg.ForceShared := in_msg.ForceShared;
+                out_msg.Private := in_msg.Private;
+                out_msg.CtoDSinked := in_msg.CtoDSinked;
+                out_msg.NoAckNeeded := in_msg.NoAckNeeded;
+                out_msg.Acks := in_msg.Acks;
+                out_msg.OriginalType := in_msg.OriginalType;
+            }
+        }
+    }
+
+
+    action(fr_forwardCPUPacketRefresh, "fr", desc="forward information from the CPU during refresh") {
+        peek(fromCPU_in, CPURequestMsg) {
+            DPRINTF(RubySlicc, "forwarding a message with refresh delay\n");
+            enqueue(requestToDir_out, CPURequestMsg, l3_refresh_latency) {
+                out_msg.addr := in_msg.addr;
+                out_msg.DemandAddress := in_msg.DemandAddress;
+                out_msg.Type := in_msg.Type;
+                out_msg.DataBlk := in_msg.DataBlk;
+                out_msg.Dirty := in_msg.Dirty;
+                out_msg.Requestor := in_msg.Requestor;
+                out_msg.Destination := in_msg.Destination;
+                out_msg.Shared := in_msg.Shared;
+                out_msg.MessageSize := in_msg.MessageSize;
+                out_msg.InitialRequestTime := in_msg.InitialRequestTime;
+                out_msg.ForwardRequestTime := in_msg.ForwardRequestTime;
+                out_msg.ProbeRequestStartTime := in_msg.ProbeRequestStartTime;
+                out_msg.DemandRequest: = in_msg.DemandRequest;
+                out_msg.Sharers := in_msg.Sharers;
+                out_msg.ForceShared := in_msg.ForceShared;
+                out_msg.Private := in_msg.Private;
+                out_msg.CtoDSinked := in_msg.CtoDSinked;
+                out_msg.NoAckNeeded := in_msg.NoAckNeeded;
+                out_msg.Acks := in_msg.Acks;
+                out_msg.OriginalType := in_msg.OriginalType;
+            }
+        }
+    }
+
+    action(pp_popCPUQueue, "pc", desc="pop CPU request queue") {
+        fromCPU_in.dequeue(clockEdge());
+    }
+
+    action(pp_popRefreshQueue, "pr", desc="pop refresh request queue") {
+        refresh_mod_in.dequeue(clockEdge());
+    }
+
+    // BEGIN TRANSITIONS
+
+    transition(R_n, StartRF, R){
+        pp_popRefreshQueue;
+    }
+
+    transition(R, StopRF, R_n){
+        pp_popRefreshQueue;
+    }
+
+    transition(R, Forward, R_n){
+        fr_forwardCPUPacketRefresh;
+        pp_popCPUQueue;
+    }
+
+    transition(R_n, Forward){
+        f_forwardCPUPacket;
+        pp_popCPUQueue;
+    }
+
+    transition(R_n, StopRF){
+        pp_popRefreshQueue;
+    }
+
+}

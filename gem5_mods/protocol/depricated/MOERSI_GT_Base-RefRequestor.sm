@@ -1,0 +1,204 @@
+/*******************************************************************************
+* Copyright (c) 2015-2024
+* School of Electrical, Computer and Energy Engineering, Georgia Institute of Technology
+* PI: Prof. Shimeng Yu
+* All rights reserved.
+*
+* This source code is part of NeuroSim - a device-circuit-algorithm framework to benchmark
+* neuro-inspired architectures with synaptic devices(e.g., SRAM and emerging non-volatile memory).
+* Copyright of the model is maintained by the developers, and the model is distributed under
+* the terms of the Creative Commons Attribution-NonCommercial 4.0 International Public License
+* http://creativecommons.org/licenses/by-nc/4.0/legalcode.
+* The source code is free and you can redistribute and/or modify it
+* by providing that the following conditions are met:
+*
+*  (1) Redistributions of source code must retain the above copyright notice,
+*     this list of conditions and the following disclaimer.
+*
+*  (2) Redistributions in binary form must reproduce the above copyright notice,
+*     this list of conditions and the following disclaimer in the documentation
+*     and/or other materials provided with the distribution.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+* ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+* FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+* CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+* OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+* OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*
+* Developer list:
+*   Faaiq Waqar	    Email: fwaqar3 at gatech dot edu
+********************************************************************************/
+
+machine(MachineType:MiscNode, "L3 Refresh Requester and Counter")
+: Cycles l3_increment_latency := 1;
+Cycles l3_refresh_period := 35;
+Cycles l3_refresh_latency := 5;
+
+// Add buffers associated with each port for counting
+MessageBuffer * incrementReq_0 network="To", virtual_network="6", vnet_type="none";
+MessageBuffer * incrementReq_1 network="To", virtual_network="7", vnet_type="none";
+MessageBuffer * incrementResp_0 network="From", virtual_network="6", vnet_type="none";
+MessageBuffer * incrementResp_1 network="From", virtual_network="7", vnet_type="none";
+
+// Add buffers associated with sending requests to the forwarder
+MessageBuffer * refreshReq network="To", virtual_network="8", vnet_type="request";
+
+// Add incoming port for incoming CPU Requests to the L3 Cache (Used for kickoff)
+MessageBuffer * fromCPU network="From", virtual_network="2", vnet_type="response";
+{
+    Tick clockEdge();
+
+    Entry getCacheEntry(Addr addr), return_by_pointer="yes" {
+        return static_cast(Entry, "pointer", L3cache.lookup(addr));
+    }
+
+    // EVENTS
+    enumeration(Event, desc="Refresh Counter Events") {
+        Kickoff,   desc="Use first CPU request to begin refresh cycling";
+        ooRefresh, desc="Out of refresh counting";
+        inRefresh, desc="In refresh counting";
+        startRF,   desc="prepare refresh start message";
+        stopRF,    desc="prepare refresh stop message";
+    }
+
+    state_declaration(State, desc="Refresh Counter/Requestor States"){
+        I, AccessPermission:Invalid, desc="Initialization, needed to kick off counters";
+
+        CF_0, AccessPermission:Read_Write, desc="Counter when in forwarding mode unit 0";
+        CF_1, AccessPermission:Read_Write, desc="Counter when in forwarding mode unit 1";
+        CR_0, AccessPermission:Read_Write, desc="Counter when in refresh mode unit 0";
+        CR_1, AccessPermission:Read_Write, desc="Counter when in refresh mode unit 1";
+    }
+
+    // VARIABLES
+    Cycles currentCycle := 0;
+
+    // OUT PORTS
+    out_port(incrementReq_0_out, ResponseMsg, incrementReq_0);
+    out_port(incrementReq_1_out, ResponseMsg, incrementReq_1);
+    out_port(refreshReq_out, ResponseMsg, refreshReq);
+
+    // IN PORTS
+    in_port(incrementResp_0_in, ResponseMsg, incrementResp_0, rank=0){
+        if (incrementResp_0_in.isReady(clockEdge())) {
+            peek(incrementResp_0_in, ResponseMsg) {
+                currentCycle := currentCycle + 1;
+                Addr refAddr := static_cast(Addr, "value", 0x0)
+                if(currentCycle == l3_refresh_period){
+                    currentCycle := 0;
+                    trigger(Event:startRF, refAddr);
+                } else {
+                    trigger(Event:ooRefresh, refAddr);
+                }
+            }
+        }
+    }
+
+    in_port(incrementResp_1_in, ResponseMsg, incrementResp_1, rank=1){
+        if (incrementResp_1_in.isReady(clockEdge())) {
+            peek(incrementResp_1_in, ResponseMsg) {
+                currentCycle := currentCycle + 1;
+                Addr refAddr := static_cast(Addr, "value", 0x0)
+                if(currentCycle == l3_refresh_latency){
+                    currentCycle := 0;
+                    trigger(Event:stopRF, refAddr);
+                } else {
+                    trigger(Event:inRefresh, refAddr);
+                }
+            }
+        }
+    }
+
+    in_port(fromCPU_in, CPURequestMsg, fromCPU, rank=2){
+        if (fromCPU_in.isReady(clockEdge())) {
+            peek(fromCPU_in, CPURequestMsg) {
+                Addr refAddr := static_cast(Addr, "value", 0x0)
+                trigger(Event:Kickoff, refAddr);
+            }
+        }
+    }
+
+    // BEGIN ACTIONS
+    action(pp_popCPUQueue, "pc", desc="pop CPU request queue") {
+        fromCPU_in.dequeue(clockEdge());
+    }
+
+    action(pp_popRefreshQueue, "pr", desc="pop start refresh request queue") {
+        incrementResp_0_in.dequeue(clockEdge());
+    }
+
+    action(pp_popNRefreshQueue, "pr_n", desc="pop stop refresh request queue") {
+        incrementResp_1_in.dequeue(clockEdge());
+    }
+
+    action(s_sendIncrementReqOO, "ooi", desc="send an increment request out of the refresh") {
+       enqueue(incrementReq_0_out, ResponseMsg, 1) {
+            out_msg.Type := CoherenceRequestType:IncTimeResp;
+       }
+    }
+
+    action(s_sendIncrementReqIN, "ini", desc="send an increment request in the refresh") {
+       enqueue(incrementReq_1_out, ResponseMsg, 1) {
+            out_msg.Type := CoherenceRequestType:IncTimeResp;
+       }
+    }
+
+    action(s_sendStartRF, "sr", desc="send a request to begin forwarding refresh") {
+        DPRINTF(RubySlicc, "sending a start refresh request\n");
+        enqueue(refreshReq_out, ResponseMsg, 0) {
+            out_msg.Type := CoherenceRequestType:StartRF;
+       }
+    }
+
+    action(s_sendStopRF, "srn", desc="send a request to stop forwarding refresh") {
+        DPRINTF(RubySlicc, "sending a stop refresh request\n");
+        enqueue(refreshReq_out, ResponseMsg, 0) {
+            out_msg.Type := CoherenceRequestType:StopRF;
+       }
+    }
+
+    // BEGIN TRANSITIONS
+    transition(I, Kickoff, CF_0){
+        pp_popCPUQueue;
+    }
+
+    transition({CF_0, CF_1, CR_0, CR_1}, Kickoff){
+        pp_popCPUQueue;
+    }
+
+    transition(CF_0, ooRefresh, CF_1){
+        s_sendIncrementReqOO;
+        pp_popRefreshQueue;
+    }
+
+    transition(CF_1, ooRefresh, CF_0){
+        s_sendIncrementReqOO;
+        pp_popRefreshQueue;
+    }
+
+    transition(CR_0, inRefresh, CR_1){
+        s_sendIncrementReqIN;
+        pp_popNRefreshQueue;
+    }
+
+    transition(CR_1, inRefresh, CR_0){
+        s_sendIncrementReqIN;
+        pp_popNRefreshQueue;
+    }
+
+    transition({CR_0, CR_1}, stopRF, CF_0){
+        s_sendStartRF;
+        pp_popRefreshQueue;
+    }
+
+    transition({CF_0, CF_1}, startRF, CR_0){
+        s_sendStopRF;
+        pp_popNRefreshQueue;
+    }
+
+}

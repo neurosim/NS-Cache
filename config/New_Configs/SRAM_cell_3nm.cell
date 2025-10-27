@@ -1,0 +1,15 @@
+-MemCellType: SRAM
+
+-CellArea (F^2): 2047.8
+
+-SRAMCellNMOSWidth (F): 1
+-SRAMCellPMOSWidth (F): 1
+-AccessCMOSWidth (F): 1
+-AccessType: CMOS
+
+-MinSenseVoltage (mV): 100
+-CellAspectRatio: 0.4395
+
+-ReadVoltage (V): 0.248
+
+-Stitching: 16
