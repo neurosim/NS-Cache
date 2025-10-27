@@ -30,7 +30,7 @@ The following is a list of the supported nodes with key features:
 ## Getting Started
 (1) To obtain the tool from GitHub and navigate to directory
 ```
-git clone git@github.com:neurosim/NS-Cache.git
+git clone https://github.com/neurosim/NS-Cache.git
 cd NS-Cache
 ```
 
