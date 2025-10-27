@@ -57,7 +57,7 @@ make clean -C src/
 
 (3) Trying to add your own technology parameters? Try using `Technology.cpp` and `Technology.h` to add your own parasitics, and current density charecteristics.
 
-(4) Co-Integrating with a cycle-based architectural simulator? Use the `-ViewQuantization` flag in your `.cfg` file in order to view quantized outputs for different levels of the hierarchy. Adjust the clock frequency/period using the `-ClockFrequency` flag in your specified frequency in Hz to change the quantization basis.
+(4) Co-Integrating with a cycle-based architectural simulator? Use the `-ViewQuantization` flag in your `.cfg` file in order to view quantized outputs for different levels of the hierarchy. Adjust the clock frequency/period using the `-ClockFrequency` flag with your specified frequency in Hz to change the quantization basis.
 
 ### Other
 If you have logistic questions or comments, please contact :man: [Prof. Shimeng Yu](mailto:shimeng.yu@ece.gatech.edu), and if you have technical questions or comments, please contact :man: [Faaiq Waqar](mailto:faaiq.waqar@gatech.edu) or :man: [Junmo Lee](mailto:junmolee@gatech.edu) or :man: [Ming-Yen Lee](mailto:mlee838@gatech.edu).
