@@ -7,7 +7,7 @@ If you use the tool or adapt the tool in your work or publication, please cite t
 * F. Waqar, J. Kwak, J. Lee, M. Shon, O. Phadke, M. Gholamrezaei, K. Skadron, S. Yu, ※Optimization and Benchmarking of Monolithically Stackable Gain Cell Memory for Last-Level Cache, *§ IEEE Transactions Computers (T-Computer), 2025.*
 <DOI to be generated>
 
-:star2: This is the released version 1.0 (October, 2025) for the tool, and this version has **FinFET and Nanosheet generation technology integration, Peripheral circuit extensions, Gain-Cell parameterization and modifications for the Gem5 ecosystem**:. NS-Cache is currently a work-in-progress project in its initial iteration. Future releases will include packaged Gem5 [5] contents, improved documentation, tuned temperature variability models, and accessible technology extensions (i.e. amorphous oxide transistors).
+:star2: This is the released version 1.0.0 (October, 2025) for the tool, and this version has **FinFET and Nanosheet generation technology integration, Peripheral circuit extensions, Gain-Cell parameterization and modifications for the Gem5 ecosystem**:. NS-Cache is currently a work-in-progress project in its initial iteration. Future releases will include packaged Gem5 [5] contents, improved documentation, tuned temperature variability models, and accessible technology extensions (i.e. amorphous oxide transistors).
 
 ```
 The following is a list of the supported nodes with key features:
@@ -41,7 +41,7 @@ make -C src/
 
 (3) Example configurations are contained in configs. To run, use:
 ```
-.nsc <configuration_file>
+./nsc <configuration_file>
 // Example: ./nsc configs/New_Configs/SRAM_cache_14nm.cfg
 ```
 
