@@ -51,7 +51,7 @@ make clean -C src/
 ```
 
 ### Starter Tips
-(1) Example configurations can be found in `config` in the home directory. The subdirectory `New_Configs` contains new cell definitions (`.cell`) and configurations (`.cfg`) for FinFET generation SRAM nodes, Heterogeneous 3D (H3D) and Monolithic 3D (M3D) cache designs, and a Gain-Cell Design for those looking to get started. The subdirectory `Old_Configs` contains Destiny configurations (still compatible with NS-Cache).
+(1) Example configurations can be found in `config` in the home directory. The subdirectory `New_Configs` contains new cell definitions (`.cell`) and configurations (`.cfg`) for FinFET generation SRAM nodes, Heterogeneous 3D (H3D) and Monolithic 3D (M3D)* cache designs, and a Gain-Cell Design for those looking to get started. The subdirectory `Old_Configs` contains Destiny configurations (still compatible with NS-Cache). * The M3D flag does not replace the transistor technology. The user must specify what M3D memory properties are by adding cell/technology parameters.
 
 (2) Looking to understand the set of available parameters? Check out `inputParameter.cpp` and `inputParameter.h` for configuration parameters. Check out `MemCell.cpp` and `MemCell.h` for cell definition parameters available in NS-Cache.
 
