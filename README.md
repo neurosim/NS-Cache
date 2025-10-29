@@ -42,7 +42,7 @@ make -C src/
 (3) Example configurations are contained in configs. To run, use:
 ```
 ./nsc <configuration_file>
-// Example: ./nsc configs/New_Configs/SRAM_cache_14nm.cfg
+// Example: ./nsc config/New_Configs/SRAM_cache_14nm.cfg
 ```
 
 (4) To clean, use:

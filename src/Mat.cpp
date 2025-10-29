@@ -314,6 +314,33 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 		if(tech->featureSize <= 14 * 1e-9){ capBitlineRead += tech->cap_draintotal * cell->widthAccessCMOS * tech->effective_width * numRow;}
 		else {capBitlineRead  += capCellAccess * numRow;	/* Keep RBL unshared, sneak path in voltage mode */}
 		voltagePrecharge = devtech->vdd; //In the hold state, RBL is high
+
+		resMemCellOn = CalculateOnResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * tech->featureSize, NMOS, inputParameter->temperature, *tech);
+		resMemCellOff = CalculateOffResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * tech->featureSize, NMOS, inputParameter->temperature, *tech);
+
+		if (cell->readMode) { /* voltage-sensing */
+			if (cell->readVoltage == 0) {  /* Current-in voltage sensing */
+				voltageMemCellOff = cell->readCurrent * resMemCellOff;
+				voltageMemCellOn = cell->readCurrent * resMemCellOn;
+				if ((voltagePrecharge - voltageMemCellOn) <= senseVoltage) {
+					cout <<"Error[Mat]: Read current too large or too small that no reasonable precharge voltage existing" <<endl;
+					invalid = true;
+					return;
+				}
+		} else {   /*Voltage-divider sensing */
+				resInSerialForSenseAmp = sqrt(resMemCellOn * resMemCellOff);
+				resEquivalentOn = resMemCellOn * resInSerialForSenseAmp / (resMemCellOn + resInSerialForSenseAmp);
+				resEquivalentOff = resMemCellOff * resInSerialForSenseAmp / (resMemCellOff + resInSerialForSenseAmp);
+				voltageMemCellOff = cell->readVoltage * resMemCellOff / (resMemCellOff + resInSerialForSenseAmp);
+				voltageMemCellOn = cell->readVoltage * resMemCellOn / (resMemCellOn + resInSerialForSenseAmp);
+				if ((voltagePrecharge - voltageMemCellOn) <= senseVoltage) {
+					cout <<"Error[Mat]: Read Voltage too large or too small that no reasonable precharge voltage existing" <<endl;
+					invalid = true;
+					return;
+				}
+			}
+		}
+
 	} else if (cell->memCellType == FBRAM){ /* Floating Body RAM */
 		resCellAccess = 0;
 		capCellAccess = CalculateFBRAMDrainCap(cell->widthSOIDevice * tech->featureSize, *tech);
