@@ -823,8 +823,8 @@ void Mat::CalculateLatency(double _rampInput) {
 			double BLCap_perCell = capBitline / numRow + capCellAccess; // Anni update
 			double BLRes_perCell = resBitline / numRow;
 			double Elmore_BL = (resCellAccess + resPullDown) * BLCap_perCell * numRow   + BLCap_perCell * BLRes_perCell * numRow  * ( numRow +1 )  /2;
-			bitlineDelay = Elmore_BL * log(tech->vdd / (tech->vdd - cell->minSenseVoltage / 2));
-			//bitlineDelay = horowitz(tau, beta, rowDecoder.rampOutput, &bitlineRamp);
+			//bitlineDelay = Elmore_BL * log(tech->vdd / (tech->vdd - cell->minSenseVoltage / 2));
+			bitlineDelay = horowitz(tau, beta, rowDecoder.rampOutput, &bitlineRamp);
 			bitlineMux.CalculateLatency(bitlineRamp);
 			if (internalSenseAmp) {
 				senseAmp.CalculateLatency(bitlineMuxDecoder.rampOutput);
