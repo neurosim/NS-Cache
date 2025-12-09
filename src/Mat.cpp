@@ -675,7 +675,11 @@ void Mat::CalculateArea() {
 
 			double areaMIV = tsvArray.area * tsvArray.numTotalBits;
 
-			logicArea = addWidth * addHeight; /* FEOL Area, Assume ~ Similar Placement */
+			// logicArea = addWidth * addHeight; /* FEOL Area, Assume ~ Similar Placement */
+			logicArea = gcRowDecoder.area + rowDecoder.area + precharger.area + writecharger.area
+			 + bitlineMux.area + senseAmp.area + senseAmpMuxLev1.area + senseAmpMuxLev2.area
+			 + bitlineMuxDecoder.area + senseAmpMuxLev1Decoder.area + senseAmpMuxLev2Decoder.area;
+			
 			/* Default assumption, but should be moved around for subarray ratio */
 			logicWidth = logicHeight = sqrt(logicArea);
 
