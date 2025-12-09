@@ -63,9 +63,9 @@ make clean -C src/
 We are in the active process of validating the contained models with cache implementations in SOTA nodes. See table below for current list:
 | Paper | Process Node | Macro Capacity | Measured Parameters | NS-Cache Parameters |
 |------|------|------|------|------|
-| 2018 TSMC JSSC   | N7   | A3   | A4   | A5   |
-| 2021 TSMC JSSC   | N5   | B3   | B4   | B5   |
-| 2024 TSMC JSSC   | N3   | C3   | C4   | C5   |
+| 2018 TSMC ISSCC  | N7 SRAM  | 74Kb   | Speed: 338ps, Area: 5100um2    | Speed: 292.274ps (-13.5%), Area: 4856.717um2 (-4.7%)   |
+| 2021 TSMC JSSC   | N5 SRAM  | 135Mb/144Kb   | Read Speed: 770ps, Area: 8.65mm2   | Read Speed: 780.257ps (+1.3%), Area: 8.18mm2 (-5.8%)   |
+| 2024 TSMC JSSC   | N3 SRAM  | 360Kb   | Leakage: 49.8uW/Mbit, Speed: 500ps, Area: 12312um2, Read/Write Energy:10.5/11 pJ/Mbit   | Leakage: 51.81uW/Mbit (+4%), Speed: 508.385ps (+1.6%), Area: 11838.309um2 (-4%), Read/Write Energy:12.3/13.6 pJ/Mbit (+17/23%)  |
 
 
 ### Other
