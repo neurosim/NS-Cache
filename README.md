@@ -59,6 +59,15 @@ make clean -C src/
 
 (4) Co-Integrating with a cycle-based architectural simulator? Use the `-ViewQuantization` flag in your `.cfg` file in order to view quantized outputs for different levels of the hierarchy. Adjust the clock frequency/period using the `-ClockFrequency` flag with your specified frequency in Hz to change the quantization basis.
 
+### Validation
+We are in the active process of validating the contained models with cache implementations in SOTA nodes. See table below for current list:
+| Paper | Process Node | Macro Capacity | Measured Parameters | NS-Cache Parameters |
+|------|------|------|------|------|
+| 2018 TSMC JSSC   | N7   | A3   | A4   | A5   |
+| 2021 TSMC JSSC   | N5   | B3   | B4   | B5   |
+| 2024 TSMC JSSC   | N3   | C3   | C4   | C5   |
+
+
 ### Other
 If you have logistic questions or comments, please contact :man: [Prof. Shimeng Yu](mailto:shimeng.yu@ece.gatech.edu), and if you have technical questions or comments, please contact :man: [Faaiq Waqar](mailto:faaiq.waqar@gatech.edu) or :man: [Junmo Lee](mailto:junmolee@gatech.edu) or :man: [Ming-Yen Lee](mailto:mlee838@gatech.edu).
 
