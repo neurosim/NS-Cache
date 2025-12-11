@@ -1353,6 +1353,54 @@ void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
 			cout << " - Cache Tag SubArray Write Cycles = " << ceil(tagResult.bank->subarray.writeLatency * inputParameter->clockFreq) << " cycles" << endl;
 			cout << " - Cache Tag Mat Read Cycles  = " << ceil(tagResult.bank->subarray.mat.readLatency * inputParameter->clockFreq) << " cycles" << endl;
 			cout << " - Cache Tag Mat Write Cycles = " << ceil(tagResult.bank->subarray.mat.writeLatency * inputParameter->clockFreq) << " cycles" << endl;
+		
+		
+			cout << "-------------------------------------------------\n" << endl;
+			cout << "Usable GEM5 Command: (<string> indicates user inputed parameter)" << endl;
+			cout << "./build/X86_MERSI_Three_Level/gem5.opt --outdir=<output_directory>  configs/example/syscall_emulation.py --cmd <executable_path> --options=<executable_cmd_line_options>--ruby -n <num_cores> --mem-size <DRAM_capacity>GB --mem-type <DRAM_type> --l0i_size <L1I_Capacity_Per_Core>kB --l0d_size <L1D_Capacity_Per_Core>kB --l0i_assoc <L1I_Associativity> --l0d_assoc <L1D_Associativity> --l1d_size <L2_Capacity_Per_Core>kB --l1d_assoc <L2_Associativity> --cpu-type <CPU Type> ";
+			
+			// NS-Cache Derived Parameteric Outputs
+			cout << "--l2_assoc " <<  inputParameter->associativity << " ";
+			cout << "--cacheline_size " <<  inputParameter->wordWidth << " ";
+			cout << "--sys-clock " << inputParameter->clockFreq/1e9 << "GHz ";
+			cout << "--l2_size " << bank->capacity/1024/1024/8 << "MB ";
+			cout << "--l2_data_hit_latency " << ceil(cacheHitLatency * inputParameter->clockFreq) << " ";
+			cout << "--l2_data_miss_latency " << ceil(cacheMissLatency * inputParameter->clockFreq) << " ";
+			cout << "--l2_data_write_latency " << ceil(cacheWriteLatency * inputParameter->clockFreq) << " ";
+			if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM)
+				if (inputParameter->monolithic3DMat)
+					cout << "--l2_refresh_period " << ceil(cell->retentionTime/bank->numRowMat/bank->subarray.mat.stackedMemTiers * inputParameter->clockFreq) << " ";
+				else
+					cout << "--l2_refresh_period " << ceil(cell->retentionTime/bank->numRowMat * inputParameter->clockFreq) << " ";
+			else
+				cout << "--l2_refresh_period " << 1e20 << " ";
+
+			if (cell->memCellType == eDRAM)
+				cout << "--l2_refresh_latency " << ceil(bank->subarray.readLatency * inputParameter->clockFreq) << " ";
+			else if (cell->memCellType == gcDRAM)
+				cout << "--l2_refresh_latency " << ceil((bank->subarray.readLatency + bank->subarray.writeLatency) * inputParameter->clockFreq) << " ";
+			else
+				cout << "--l2_refresh_latency " << 0 << " ";
+			
+			cout << "--l2_refresh_enabled " << (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) << " ";
+			
+			cout << "--data_read_latency " << ceil(bank->subarray.readLatency * inputParameter->clockFreq) << " ";
+			cout << "--data_write_latency " << ceil(bank->subarray.writeLatency * inputParameter->clockFreq) << " ";
+			cout << "--tag_read_latency " << ceil(tagResult.bank->subarray.readLatency * inputParameter->clockFreq) << " ";
+			cout << "--tag_write_latency " << ceil(tagResult.bank->subarray.writeLatency * inputParameter->clockFreq) << " ";
+
+			// Calculate the serialized latency depending on access mode
+			if(cacheAccessMode == normal_access_mode)
+				if ((ceil((tagResult.bank->readLatency + (bank->readLatency/2 - bank->subarray.readLatency)) * inputParameter->clockFreq)) + 1 > (ceil(((bank->readLatency/2 + bank->subarray.readLatency)) * inputParameter->clockFreq)))
+					cout << "--serial_latency " << (ceil((tagResult.bank->readLatency + (bank->readLatency/2 - bank->subarray.readLatency)) * inputParameter->clockFreq)) + 1 - (ceil(((bank->readLatency/2 + bank->subarray.readLatency)) * inputParameter->clockFreq))<< " \n\n";
+				else
+					cout << "--serial_latency " << 0 << " \n\n";
+			else if (cacheAccessMode == sequential_access_mode)
+				cout << "--serial_latency " << ceil(cacheMissLatency * inputParameter->clockFreq) + 1 << " \n\n";
+			else
+				cout << "--serial_latency " << 0 << " \n\n";
+
+			cout << "-------------------------------------------------\n" << endl;
 		}
         if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
             cout << " - Cache Refresh Latency = " << MAX(tagResult.bank->refreshLatency, bank->refreshLatency) * 1e6 << "us per bank" << endl;
