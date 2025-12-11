@@ -420,12 +420,9 @@ void MemCell::ReadCellFromFile(const string & inputFile)
 		}
 
 		if (!strncmp("-RetentionTime", line, strlen("-RetentionTime"))) {
-			if (memCellType != eDRAM || memCellType != gcDRAM)
-				cout << "Warning: The input of retention time is ignored because the cell is not eDRAM." << endl;
-			else {
-				sscanf(line, "-RetentionTime (us): %lf", &retentionTime);
-                retentionTime /= 1e6;
-            }
+			sscanf(line, "-RetentionTime (us): %lf", &retentionTime);
+            retentionTime /= 1e6;
+			
 			continue;
 		}
 
