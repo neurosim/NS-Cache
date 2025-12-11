@@ -5,7 +5,7 @@ NeuroSim (NS)-Cache is a framework developed by [Prof. Shimeng Yu's group](https
 If you use the tool or adapt the tool in your work or publication, please cite the following reference:
 
 * F. Waqar, J. Kwak, J. Lee, M. Shon, O. Phadke, M. Gholamrezaei, K. Skadron, S. Yu, ※Optimization and Benchmarking of Monolithically Stackable Gain Cell Memory for Last-Level Cache, *§ IEEE Transactions Computers (T-Computer), 2025.*
-<DOI to be generated>
+10.1109/TC.2025.3625490
 
 :star2: This is the released version 1.1.0 (December, 2025) for the tool, and this version has **FinFET and Nanosheet generation technology integration, Peripheral circuit extensions, Gain-Cell parameterization and modifications for the Gem5 ecosystem**:. NS-Cache is currently a work-in-progress project in its initial iteration. Future releases will include improved documentation, tuned temperature variability models, and accessible technology extensions (i.e. amorphous oxide transistors).
 
