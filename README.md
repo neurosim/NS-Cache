@@ -7,7 +7,7 @@ If you use the tool or adapt the tool in your work or publication, please cite t
 * F. Waqar, J. Kwak, J. Lee, M. Shon, O. Phadke, M. Gholamrezaei, K. Skadron, S. Yu, ※Optimization and Benchmarking of Monolithically Stackable Gain Cell Memory for Last-Level Cache, *§ IEEE Transactions Computers (T-Computer), 2025.*
 <DOI to be generated>
 
-:star2: This is the released version 1.0.0 (October, 2025) for the tool, and this version has **FinFET and Nanosheet generation technology integration, Peripheral circuit extensions, Gain-Cell parameterization and modifications for the Gem5 ecosystem**:. NS-Cache is currently a work-in-progress project in its initial iteration. Future releases will include packaged Gem5 [5] contents, improved documentation, tuned temperature variability models, and accessible technology extensions (i.e. amorphous oxide transistors).
+:star2: This is the released version 1.1.0 (December, 2025) for the tool, and this version has **FinFET and Nanosheet generation technology integration, Peripheral circuit extensions, Gain-Cell parameterization and modifications for the Gem5 ecosystem**:. NS-Cache is currently a work-in-progress project in its initial iteration. Future releases will include improved documentation, tuned temperature variability models, and accessible technology extensions (i.e. amorphous oxide transistors).
 
 ```
 The following is a list of the supported nodes with key features:
@@ -57,15 +57,19 @@ make clean -C src/
 
 (3) Trying to add your own technology parameters? Try using `Technology.cpp` and `Technology.h` to add your own parasitics, and current density charecteristics.
 
-(4) Co-Integrating with a cycle-based architectural simulator? Use the `-ViewQuantization` flag in your `.cfg` file in order to view quantized outputs for different levels of the hierarchy. Adjust the clock frequency/period using the `-ClockFrequency` flag with your specified frequency in Hz to change the quantization basis.
+(4) Co-Integrating with a cycle-based architectural simulator? Use the `-ViewQuantization` flag in your `.cfg` file in order to view quantized outputs for different levels of the hierarchy and the output GEM5 command that can be used with the packaged version of Gem5 in this repo. Adjust the clock frequency/period using the `-ClockFrequency` flag with your specified frequency in Hz to change the quantization basis.
+
+(5) Before using the GEM5 [5] command, the user should view the guide in the Gem5 README on building with scons, and build the `MERSI_Three_Level` configuration in either `gem5.opt` or `gem5.fast` to use the parameterization contained.
+
+(6) Have a suggestion for a fix or found a bug? Help us out by submitting an `issue` above
 
 ### Validation
 We are in the active process of validating the contained models with cache implementations in SOTA nodes. See table below for current list:
 | Paper | Process Node | Macro Capacity | Measured Parameters | NS-Cache Parameters |
 |------|------|------|------|------|
-| 2018 TSMC ISSCC  | N7 SRAM  | 74Kb   | Speed: 338ps, Area: 5100um2    | Speed: 292.274ps (-13.5%), Area: 4856.717um2 (-4.7%)   |
-| 2021 TSMC JSSC   | N5 SRAM  | 135Mb/144Kb   | Read Speed: 770ps, Area: 8.65mm2   | Read Speed: 780.257ps (+1.3%), Area: 8.18mm2 (-5.8%)   |
-| 2024 TSMC JSSC   | N3 SRAM  | 360Kb   | Leakage: 49.8uW/Mbit, Speed: 500ps, Area: 12312um2, Read/Write Energy:10.5/11 pJ/Mbit   | Leakage: 51.81uW/Mbit (+4%), Speed: 508.385ps (+1.6%), Area: 11838.309um2 (-4%), Read/Write Energy:12.3/13.6 pJ/Mbit (+17/23%)  |
+| 2018 TSMC ISSCC [7]  | N7 SRAM  | 74Kb   | Speed: 338ps, Area: 5100um2    | Speed: 292.274ps (-13.5%), Area: 4856.717um2 (-4.7%)   |
+| 2020 TSMC JSSC [8]   | N5 SRAM  | 135Mb/144Kb   | Read Speed: 770ps, Area: 8.65mm2   | Read Speed: 780.257ps (+1.3%), Area: 8.18mm2 (-5.8%)   |
+| 2024 TSMC JSSC [9]  | N3 SRAM  | 360Kb   | Leakage: 49.8uW/Mbit, Speed: 500ps, Area: 12312um2, Read/Write Energy:10.5/11 pJ/Mbit   | Leakage: 51.81uW/Mbit (+4%), Speed: 508.385ps (+1.6%), Area: 11838.309um2 (-4%), Read/Write Energy:12.3/13.6 pJ/Mbit (+17/23%)  |
 
 
 ### Other
@@ -85,3 +89,9 @@ This research is supported by the PRISM and CHIMES centers (SRC/DARPA JUMP 2.0).
 [5] N. Binkert, B. Beckmann, G. Black, S.K Reinhardt, A. Saidi, J. Hestness, D.R Hower, T. Krishna, S. Sardashti, R. Sen ※The gem5 simulator, *§ ACM Sigarch computer architecture news 2011
 
 [6] J. Lee, A. Lu, W. Li, S. Yu, ※NeuroSim V1. 4: Extending Technology Support for Digital Compute-in-Memory Toward 1nm Node, *§ IEEE Transactions on Circuits and Systems I: Regular Papers, 2024.
+
+[7] M. Clinton, R. Singh, M. Tsai, S. Zhang, B. Sheffield, J. Chang, ※A 5GHz 7nm L1 cache memory compiler for high-speed computing and mobile applications, *§ IEEE International Solid-State Circuits Conference (ISSCC), 2018.
+
+[8] T.-Y. J. Chang, Y.-H. Chen, W.-M. Chan, H. Cheng, P.-S. Wang, Y. Lin, H. Fujiwara, et al., ※A 5-nm 135-mb SRAM in EUV and high-mobility channel FinFET technology with metal coupling and charge-sharing write-assist circuitry schemes for high-density and low-VMIN applications, *§ IEEE Journal of Solid-State Circuits, 2020.
+
+[9] Y. Osada, T. Nakazato, Y. Aoyagi, K. Nii, J.-J. Liaw, S.-Y. Wu, Q. Li, H. Fujiwara, H.-J. Liao, T.-Y. J. Chang, ※3.7-GHz multi-bank high-current single-port cache SRAM with leakage saving circuits in 3-nm FinFET for HPC applications, *§ IEEE Journal of Solid-State Circuits, 2024.
