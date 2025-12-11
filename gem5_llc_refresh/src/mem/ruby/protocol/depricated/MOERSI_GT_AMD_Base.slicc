@@ -1,0 +1,8 @@
+protocol "MOERSI_GT_AMD_Base";
+include "RubySlicc_interfaces.slicc";
+include "MOERSI_GT_AMD_Base-msg.sm";
+include "MOERSI_GT_AMD_Base-CorePair.sm";
+include "MOERSI_GT_AMD_Base-L3cache.sm";
+include "MOERSI_GT_AMD_Base-dir.sm";
+include "MOERSI_GT_Base-FwdControl.sm";
+include "MOERSI_GT_Base-RefRequestor.sm";
