@@ -1359,46 +1359,63 @@ void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
 			cout << "Usable GEM5 Command: (<string> indicates user inputed parameter)" << endl;
 			cout << "./build/X86_MERSI_Three_Level/gem5.opt --outdir=<output_directory>  configs/example/syscall_emulation.py --cmd <executable_path> --options=<executable_cmd_line_options>--ruby -n <num_cores> --mem-size <DRAM_capacity>GB --mem-type <DRAM_type> --l0i_size <L1I_Capacity_Per_Core>kB --l0d_size <L1D_Capacity_Per_Core>kB --l0i_assoc <L1I_Associativity> --l0d_assoc <L1D_Associativity> --l1d_size <L2_Capacity_Per_Core>kB --l1d_assoc <L2_Associativity> --cpu-type <CPU Type> ";
 			
+			// helper: convert (seconds * Hz) -> integer cycles
+			auto cycles = [&](double seconds) -> uint64_t {
+			    return static_cast<uint64_t>(std::ceil(seconds * inputParameter->clockFreq));
+			};
+			
 			// NS-Cache Derived Parameteric Outputs
-			cout << "--l2_assoc " <<  inputParameter->associativity << " ";
-			cout << "--cacheline_size " <<  inputParameter->wordWidth << " ";
-			cout << "--sys-clock " << inputParameter->clockFreq/1e9 << "GHz ";
-			cout << "--l2_size " << bank->capacity/1024/1024/8 << "MB ";
-			cout << "--l2_data_hit_latency " << ceil(cacheHitLatency * inputParameter->clockFreq) << " ";
-			cout << "--l2_data_miss_latency " << ceil(cacheMissLatency * inputParameter->clockFreq) << " ";
-			cout << "--l2_data_write_latency " << ceil(cacheWriteLatency * inputParameter->clockFreq) << " ";
-			if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM)
-				if (inputParameter->monolithic3DMat)
-					cout << "--l2_refresh_period " << ceil(cell->retentionTime/bank->numRowMat/bank->subarray.mat.stackedMemTiers * inputParameter->clockFreq) << " ";
-				else
-					cout << "--l2_refresh_period " << ceil(cell->retentionTime/bank->numRowMat * inputParameter->clockFreq) << " ";
-			else
-				cout << "--l2_refresh_period " << 1e20 << " ";
-
-			if (cell->memCellType == eDRAM)
-				cout << "--l2_refresh_latency " << ceil(bank->subarray.readLatency * inputParameter->clockFreq) << " ";
-			else if (cell->memCellType == gcDRAM)
-				cout << "--l2_refresh_latency " << ceil((bank->subarray.readLatency + bank->subarray.writeLatency) * inputParameter->clockFreq) << " ";
-			else
-				cout << "--l2_refresh_latency " << 0 << " ";
+			cout << "--l2_assoc " << inputParameter->associativity << " ";
+			cout << "--cacheline_size " << inputParameter->wordWidth << " ";
+			cout << "--sys-clock " << (inputParameter->clockFreq / 1e9) << "GHz ";
+			cout << "--l2_size " << (bank->capacity / 1024 / 1024 / 8) << "MB ";
+			
+			cout << "--l2_data_hit_latency "   << cycles(cacheHitLatency)   << " ";
+			cout << "--l2_data_miss_latency "  << cycles(cacheMissLatency)  << " ";
+			cout << "--l2_data_write_latency " << cycles(cacheWriteLatency) << " ";
+			
+			if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+			    if (inputParameter->monolithic3DMat) {
+			        cout << "--l2_refresh_period "
+			             << cycles(cell->retentionTime / bank->numRowMat / bank->subarray.mat.stackedMemTiers)
+			             << " ";
+			    } else {
+			        cout << "--l2_refresh_period "
+			             << cycles(cell->retentionTime / bank->numRowMat)
+			             << " ";
+			    }
+			} else {
+			    // 1e20 will overflow uint64_t; use a clear integer sentinel instead
+			    cout << "--l2_refresh_period " << std::numeric_limits<uint64_t>::max() << " ";
+			}
+			
+			if (cell->memCellType == eDRAM) {
+			    cout << "--l2_refresh_latency " << cycles(bank->subarray.readLatency) << " ";
+			} else if (cell->memCellType == gcDRAM) {
+			    cout << "--l2_refresh_latency " << cycles(bank->subarray.readLatency + bank->subarray.writeLatency) << " ";
+			} else {
+			    cout << "--l2_refresh_latency " << 0 << " ";
+			}
 			
 			cout << "--l2_refresh_enabled " << (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) << " ";
 			
-			cout << "--data_read_latency " << ceil(bank->subarray.readLatency * inputParameter->clockFreq) << " ";
-			cout << "--data_write_latency " << ceil(bank->subarray.writeLatency * inputParameter->clockFreq) << " ";
-			cout << "--tag_read_latency " << ceil(tagResult.bank->subarray.readLatency * inputParameter->clockFreq) << " ";
-			cout << "--tag_write_latency " << ceil(tagResult.bank->subarray.writeLatency * inputParameter->clockFreq) << " ";
-
+			cout << "--data_read_latency "  << cycles(bank->subarray.readLatency) << " ";
+			cout << "--data_write_latency " << cycles(bank->subarray.writeLatency) << " ";
+			cout << "--tag_read_latency "   << cycles(tagResult.bank->subarray.readLatency) << " ";
+			cout << "--tag_write_latency "  << cycles(tagResult.bank->subarray.writeLatency) << " ";
+			
 			// Calculate the serialized latency depending on access mode
-			if(cacheAccessMode == normal_access_mode)
-				if ((ceil((tagResult.bank->readLatency + (bank->readLatency/2 - bank->subarray.readLatency)) * inputParameter->clockFreq)) + 1 > (ceil(((bank->readLatency/2 + bank->subarray.readLatency)) * inputParameter->clockFreq)))
-					cout << "--serial_latency " << (ceil((tagResult.bank->readLatency + (bank->readLatency/2 - bank->subarray.readLatency)) * inputParameter->clockFreq)) + 1 - (ceil(((bank->readLatency/2 + bank->subarray.readLatency)) * inputParameter->clockFreq))<< " \n\n";
-				else
-					cout << "--serial_latency " << 0 << " \n\n";
-			else if (cacheAccessMode == sequential_access_mode)
-				cout << "--serial_latency " << ceil(cacheMissLatency * inputParameter->clockFreq) + 1 << " \n\n";
-			else
-				cout << "--serial_latency " << 0 << " \n\n";
+			if (cacheAccessMode == normal_access_mode) {
+			    const uint64_t tagCyc  = cycles(tagResult.bank->readLatency + (bank->readLatency/2 - bank->subarray.readLatency));
+			    const uint64_t dataCyc = cycles(bank->readLatency/2 + bank->subarray.readLatency);
+			    const uint64_t serial  = (tagCyc + 1 > dataCyc) ? (tagCyc + 1 - dataCyc) : 0;
+			    cout << "--serial_latency " << serial << " \n\n";
+			} else if (cacheAccessMode == sequential_access_mode) {
+			    cout << "--serial_latency " << (cycles(cacheMissLatency) + 1) << " \n\n";
+			} else {
+			    cout << "--serial_latency " << 0 << " \n\n";
+			}
+
 
 			cout << "-------------------------------------------------\n" << endl;
 		}
