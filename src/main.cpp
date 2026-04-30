@@ -51,34 +51,6 @@ Wire *localWire;
 Wire *globalWire;
 MemCell **sweepCells;
 
-/* I am a Lazy POS and as a temp solution, I will add some gain cell parameters here */
-
-double GCRAM_CDREDUCTION = 0; //0.1e-15 * 18;
-
-// Enable/Disable functions
-bool GCRAM_MUXEN = false; // Enable/Disable Use of Multiplexing on SenseAmps, although this might not be incredibly useful for us
-bool GCRAM_FOLD = true; // If true, use a folded-bitline strategy. Otherwise, use an open bitline strategy
-bool GCRAM_RACCU = false; // If true, use the traditional calculation for read latency calculation in DESTINY, else use from SPICE
-
-// Device Parasitic Parameters
-double GCRAM_GATECAP = 5.5e-15 - GCRAM_CDREDUCTION * 2; // What is the gate capacitance of the device per micron
-double GCRAM_CONTCAP = 1.9e-15 - GCRAM_CDREDUCTION; // What is the source/drain capacitance of the device per micron, this is parasitic
-double GCRAM_CHANRES = 30769.3; // What is the channel resistnace at 1 micron. This has an inverse relationship to width when compared to cap
-
-// Device Geometry Parameters
-double GCRAM_RACCW = 100e-3; // What is the width of the read access transistor?
-double GCRAM_WACCW = 50e-3; // What is the width of the write access transistor?
-
-// Access Timing Parameters
-double GCRAM_RACCT = 312e-12; // 335e-12; // What is the read access latency of the cell
-double GCRAM_WACCT = 62.6e-12; // 62.6e-12; // What is the write access latency of the cell
-
-// Voltage Operation Parameters
-double GCRAM_WBVOLT = 0.7; // What is the voltage used to activate the write bitlines?
-double GCRAM_WWVOLT = 1.3; // What is the voltage used to activate the write wordlines?
-double GCRAM_RBVOLT = 0.7; // What is the voltage used to activate the read bitlines?
-double GCRAM_RWVOLT = 0.7; //1.0; // What is the voltage used to activate the read wordlines?
-
 int numRowMat, numColumnMat;
 
 void applyConstraint();
