@@ -72,6 +72,7 @@ MemCell::MemCell() {
 	resistanceOffAtHalfReadVoltage = 0;
 
     retentionTime = invalid_value;
+	temperature = 300;
 }
 
 MemCell::~MemCell() {
@@ -272,9 +273,9 @@ void MemCell::ReadCellFromFile(const string & inputFile)
 			continue;
 		}
 		if (!strncmp("-SetVoltage", line, strlen("-SetVoltage"))) {
-            sscanf(line, "-ResetVoltage (V): %s", tmp);
+            sscanf(line, "-SetVoltage (V): %s", tmp);
             if (!strcmp(tmp, "vdd"))
-                resetVoltage = tech->vdd;
+                setVoltage = tech->vdd;
             else
                 sscanf(line, "-SetVoltage (V): %lf", &setVoltage);
 			continue;
@@ -427,7 +428,7 @@ void MemCell::ReadCellFromFile(const string & inputFile)
 		}
 
 		if (!strncmp("-Temperature", line, strlen("-Temperature"))) {
-			if (memCellType != eDRAM || memCellType != gcDRAM)
+			if (memCellType != eDRAM && memCellType != gcDRAM)
 				cout << "Warning: The input of temperature is ignored because the cell is not eDRAM." << endl;
 			else
 				sscanf(line, "-Temperature (K): %lf", &temperature);

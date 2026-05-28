@@ -33,7 +33,7 @@ void OutputDriver::Initialize(double _logicEffort, double _inputCap, double _out
 	areaOptimizationLevel = _areaOptimizationLevel;
 	minDriverCurrent = _minDriverCurrent;
 	addRepeaters = _addRepeaters;
-	wireLength - _wireLength;
+	wireLength = _wireLength;
 
 	double sizingfactor_MUX = 1;
 	

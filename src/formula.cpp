@@ -99,7 +99,7 @@ double CalculateGateArea(
 	
     double	ratio = widthPMOS / (widthPMOS + widthNMOS);
     double maxWidthPMOS, maxWidthNMOS;
-    int maxNumPFin, maxNumNFin;	/* Max number of fins for the specified cell height */
+    int maxNumPFin = 0, maxNumNFin = 0;	/* Max number of fins for the specified cell height */
     double unitWidthRegionP, unitWidthRegionN;
     double widthRegionP, widthRegionN;
     double heightRegionP, heightRegionN;
@@ -193,11 +193,15 @@ double CalculateGateArea(
             maxNumPFin =  maxNumNFin = tech.max_fin_num;
         } else if (tech.featureSize == 2 * 1e-9) {
             maxNumPSheet= maxNumNSheet = tech.max_fin_per_GAA;
-        } else if (tech.featureSize == 1 * 1e-9) {
-            maxNumPSheet= maxNumNSheet = tech.max_fin_per_GAA;
-        } 
+	        } else if (tech.featureSize == 1 * 1e-9) {
+	            maxNumPSheet= maxNumNSheet = tech.max_fin_per_GAA;
+	        } else if (tech.featureSize > 2 * 1e-9) {
+	            maxNumPFin = maxNumNFin = tech.max_fin_num;
+	        } else {
+	            maxNumPSheet = maxNumNSheet = tech.max_fin_per_GAA;
+	        }
 
-        }
+	        }
 
         else {
 
@@ -214,9 +218,13 @@ double CalculateGateArea(
             maxNumPFin = maxNumNFin = (floor)( ( (heightTransistorRegion -  (double) MIN_GAP_BET_P_AND_N_DIFFS_3nm * tech.featureSize -  (double) OUTER_HEIGHT_REGION_3nm * tech.featureSize) + tech.PitchFin ) / 2.0 / (tech.widthFin + tech.PitchFin) );
         } else if (tech.featureSize == 2 * 1e-9) {
             maxNumPSheet= maxNumNSheet =  (floor)( ( (heightTransistorRegion -  (double) MIN_GAP_BET_P_AND_N_DIFFS_2nm * tech.featureSize -  (double) OUTER_HEIGHT_REGION_2nm * tech.featureSize) + tech.PitchFin ) / 2.0 / (tech.widthFin + tech.PitchFin) );
-        } else if (tech.featureSize == 1 * 1e-9) {
-            maxNumPSheet= maxNumNSheet = (floor)( ( (heightTransistorRegion -  (double) MIN_GAP_BET_P_AND_N_DIFFS_1nm * tech.featureSize -  (double) OUTER_HEIGHT_REGION_1nm* tech.featureSize) + tech.PitchFin ) / 2.0 / (tech.widthFin + tech.PitchFin) );
-        } 
+	        } else if (tech.featureSize == 1 * 1e-9) {
+	            maxNumPSheet= maxNumNSheet = (floor)( ( (heightTransistorRegion -  (double) MIN_GAP_BET_P_AND_N_DIFFS_1nm * tech.featureSize -  (double) OUTER_HEIGHT_REGION_1nm* tech.featureSize) + tech.PitchFin ) / 2.0 / (tech.widthFin + tech.PitchFin) );
+	        } else if (tech.featureSize > 2 * 1e-9) {
+	            maxNumPFin = maxNumNFin = tech.max_fin_num;
+	        } else {
+	            maxNumPSheet = maxNumNSheet = tech.max_fin_per_GAA;
+	        }
             
 
         }

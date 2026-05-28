@@ -1458,52 +1458,49 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
         outFile.close();
         return;
     } else {
-        double cacheHitLatency, cacheMissLatency, cacheWriteLatency;
-        double cacheHitDynamicEnergy, cacheMissDynamicEnergy, cacheWriteDynamicEnergy;
-        double cacheLeakage;
-        double cacheArea;
+	    double cacheHitLatency = 0;
+	    double cacheMissLatency = 0;
+	    double cacheWriteLatency = 0;
+	    double cacheHitDynamicEnergy = 0;
+	    double cacheMissDynamicEnergy = 0;
+	    double cacheWriteDynamicEnergy = 0;
+	    double cacheLeakage = 0;
+	    double cacheArea = 0;
 
-        if (cacheAccessMode == normal_access_mode) {
-            // Calculate latencies
-            // cacheMissLatency = tagResult.bank->readLatency;  // only the tag access latency
-            cacheHitLatency =
-                bank->subarray.readLatency; // access tag and activate data row in parallel
-            cacheHitLatency += bank->subarray.mat.columnDecoderLatency;  // add column decoder latency after hit
-            cacheHitLatency += bank->readLatency - bank->subarray.readLatency; // H-tree in and out latency
-            cacheWriteLatency = bank->writeLatency; // Data and tag are written in parallel
+	    if (cacheAccessMode == normal_access_mode) {
+	        // Calculate latencies
+	        cacheHitLatency = bank->subarray.readLatency;
+	        cacheHitLatency += bank->subarray.mat.columnDecoderLatency;  // add column decoder latency after hit
+	        cacheHitLatency += bank->readLatency - bank->subarray.readLatency; // H-tree in and out latency
+	        cacheWriteLatency = bank->writeLatency;
 
-            // Calculate power
-            //cacheMissDynamicEnergy = tagResult.bank->readDynamicEnergy; // no subarrayter what tag is always accessed
-            cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
-            cacheHitDynamicEnergy = bank->readDynamicEnergy;
-            cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
-        } else if (cacheAccessMode == fast_access_mode) {
-            // Calculate latencies
-            // cacheMissLatency = tagResult.bank->readLatency;
-            cacheHitLatency = bank->readLatency;
-            cacheWriteLatency = bank->writeLatency;
+	        // Calculate power
+	        cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
+	        cacheHitDynamicEnergy = bank->readDynamicEnergy;
+	        cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
+	    } else if (cacheAccessMode == fast_access_mode) {
+	        // Calculate latencies
+	        cacheHitLatency = bank->readLatency;
+	        cacheWriteLatency = bank->writeLatency;
 
-            // Calculate power
-            // cacheMissDynamicEnergy = tagResult.bank->readDynamicEnergy; // no subarrayter what tag is always accessed
-            cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
-            cacheHitDynamicEnergy = bank->readDynamicEnergy;
-            cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
-        } else { // sequential access
-            // Calculate latencies
-            // cacheMissLatency = tagResult.bank->readLatency;
-            cacheHitLatency = bank->readLatency;
-            cacheWriteLatency =bank->writeLatency;
+	        // Calculate power
+	        cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
+	        cacheHitDynamicEnergy = bank->readDynamicEnergy;
+	        cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
+	    } else { // sequential access
+	        // Calculate latencies
+	        cacheHitLatency = bank->readLatency;
+	        cacheWriteLatency = bank->writeLatency;
 
-            // Calculate power
-            //cacheMissDynamicEnergy = tagResult.bank->readDynamicEnergy; // no subarrayter what tag is always accessed
-            cacheHitDynamicEnergy = bank->readDynamicEnergy;
-            cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
-        }
+	        // Calculate power
+	        cacheHitDynamicEnergy = bank->readDynamicEnergy;
+	        cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
+	    }
 
-        // Calculate leakage
-        // cacheLeakage = tagResult.bank->leakage + bank->leakage;
-        // Calculate area
-        cacheArea = bank->area;  // Just add them
+	    // Calculate leakage
+	    cacheLeakage = bank->leakage;
+	    // Calculate area
+	    cacheArea = bank->area;
 
         // Now write to the file instead of the console
         outFile << endl
@@ -1527,8 +1524,6 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
         outFile << " - Total Area = " << cacheArea * 1e6 << "mm^2" << endl;
         outFile << " |--- Data Array Area = " << bank->height * 1e6 << "um x "
                 << bank->width * 1e6 << "um = " << bank->area * 1e6 << "mm^2" << endl;
-        //outFile << " |--- Tag Array Area  = " << tagResult.bank->height * 1e6 << "um x "
-        //        << tagResult.bank->width * 1e6 << "um = " << tagResult.bank->area * 1e6 << "mm^2" << endl;
 
         // Timing
         outFile << "Timing:" << endl;
@@ -1546,14 +1541,14 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
 			outFile << " - Cache Data Mat Write Cycles = " << ceil(bank->subarray.mat.writeLatency * inputParameter->clockFreq) << " cycles" << endl;
 		}
         if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
-            outFile << " - Cache Refresh Latency = "
-                    << bank->refreshLatency * 1e6
-                    << "us per bank" << endl;
-            outFile << " - Cache Availability = "
-                    << ((cell->retentionTime -
-                         bank->refreshLatency) /
-                        cell->retentionTime) *
-                           100.0
+	        outFile << " - Cache Refresh Latency = "
+	                << bank->refreshLatency * 1e6
+	                << "us per bank" << endl;
+	        outFile << " - Cache Availability = "
+	                << ((cell->retentionTime -
+	                     bank->refreshLatency) /
+	                    cell->retentionTime) *
+	                       100.0
                     << "%" << endl;
         }
 
@@ -1565,15 +1560,13 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
                 << "nJ per access" << endl;
         outFile << " - Cache Write Dynamic Energy = " << cacheWriteDynamicEnergy * 1e9
                 << "nJ per access" << endl;
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
-            outFile << " - Cache Refresh Dynamic Energy = "
-                    << (bank->refreshDynamicEnergy) * 1e9
-                    << "nJ per bank" << endl;
-        }
-        outFile << " - Cache Total Leakage Power  = " << cacheLeakage * 1e3 << "mW" << endl;
-        outFile << " |--- Cache Data Array Leakage Power = " << bank->leakage * 1e3 << "mW" << endl;
-        //outFile << " |--- Cache Tag Array Leakage Power  = "
-        //        << tagResult.bank->leakage * 1e3 << "mW" << endl;
+	    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+	        outFile << " - Cache Refresh Dynamic Energy = "
+	                << (bank->refreshDynamicEnergy) * 1e9
+	                << "nJ per bank" << endl;
+	    }
+	    outFile << " - Cache Total Leakage Power  = " << cacheLeakage * 1e3 << "mW" << endl;
+	    outFile << " |--- Cache Data Array Leakage Power = " << bank->leakage * 1e3 << "mW" << endl;
         if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
             outFile << " - Cache Refresh Power = "
                     << TO_WATT(bank->refreshDynamicEnergy / (cell->retentionTime))

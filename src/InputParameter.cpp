@@ -474,7 +474,7 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 		}
 
 		if (!strncmp("-ClockFrequency", line, strlen("-ClockFrequency"))) {
-			sscanf(line, "-ClockFrequency: %d", &clockInput);
+			sscanf(line, "-ClockFrequency: %lf", &clockInput);
 			clockFreq = clockInput;
 			continue;
 		}
@@ -631,19 +631,19 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 		}
 
 		if (!strncmp("-ViewMatStatistics", line, strlen("-ViewMatStatistics"))) {
-			sscanf(line, "-ViewMatStatistics: %lf", tmp);
+			sscanf(line, "-ViewMatStatistics: %s", tmp);
 			viewMatStats = true;
 			continue;
 		}
 
-		if (!strncmp("-ViewQuantization", line, strlen("-VieQuantization"))) {
-			sscanf(line, "-ViewQuantization: %lf", tmp);
+		if (!strncmp("-ViewQuantization", line, strlen("-ViewQuantization"))) {
+			sscanf(line, "-ViewQuantization: %s", tmp);
 			quantize = true;
 			continue;
 		}
 
 		if (!strncmp("-M3DMemory", line, strlen("-M3DMemory"))) {
-			sscanf(line, "-M3DMemory: %lf", tmp);
+			sscanf(line, "-M3DMemory: %s", tmp);
 			monolithic3DMat = true;
 			continue;
 		}
