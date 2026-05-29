@@ -53,6 +53,8 @@ Result::Result() {
 	limitWriteDynamicEnergy = invalid_value;
 	limitReadEdp = invalid_value;
 	limitWriteEdp = invalid_value;
+	limitReadBandwidth = invalid_value_min;
+	limitWriteBandwidth = invalid_value_min;
 	limitArea = invalid_value;
 	limitLeakage = invalid_value;
 
@@ -83,6 +85,33 @@ void Result::reset() {
 	bank->area = invalid_value;
 }
 
+double Result::getReadBandwidth() const {
+	if (bank->readLatency >= invalid_value / 10 || bank->blockSize <= 0)
+		return 0;
+
+	double readCycleLatency = bank->subarray.mat.readLatency - bank->subarray.mat.rowDecoder.readLatency
+			+ bank->subarray.mat.precharger.readLatency;
+	if (cell && cell->memCellType == gcDRAM) {
+		readCycleLatency = bank->subarray.mat.readLatency - bank->subarray.mat.gcRowDecoder.readLatency
+				+ bank->subarray.mat.precharger.readLatency;
+	}
+	if (readCycleLatency <= 0 || readCycleLatency >= invalid_value / 10)
+		return 0;
+
+	return (double)bank->blockSize / readCycleLatency / 8;
+}
+
+double Result::getWriteBandwidth() const {
+	if (bank->writeLatency >= invalid_value / 10 || bank->blockSize <= 0)
+		return 0;
+
+	double writeCycleLatency = bank->subarray.mat.writeLatency;
+	if (writeCycleLatency <= 0 || writeCycleLatency >= invalid_value / 10)
+		return 0;
+
+	return (double)bank->blockSize / writeCycleLatency / 8;
+}
+
 bool Result::compareAndUpdate(Result &newResult) {
     bool toUpdate = false;
 
@@ -90,6 +119,8 @@ bool Result::compareAndUpdate(Result &newResult) {
 			&& newResult.bank->readDynamicEnergy <= limitReadDynamicEnergy && newResult.bank->writeDynamicEnergy <= limitWriteDynamicEnergy
 			&& newResult.bank->readLatency * newResult.bank->readDynamicEnergy <= limitReadEdp
 			&& newResult.bank->writeLatency * newResult.bank->writeDynamicEnergy <= limitWriteEdp
+			&& newResult.getReadBandwidth() >= limitReadBandwidth
+			&& newResult.getWriteBandwidth() >= limitWriteBandwidth
 			&& newResult.bank->area <= limitArea && newResult.bank->leakage <= limitLeakage) {
 		switch (optimizationTarget) {
 		case read_latency_optimized:
@@ -114,6 +145,14 @@ bool Result::compareAndUpdate(Result &newResult) {
 			break;
 		case write_edp_optimized:
 			if 	(newResult.bank->writeLatency * newResult.bank->writeDynamicEnergy < bank->writeLatency * bank->writeDynamicEnergy)
+				toUpdate = true;
+			break;
+		case read_bandwidth_optimized:
+			if 	(newResult.getReadBandwidth() > getReadBandwidth())
+				toUpdate = true;
+			break;
+		case write_bandwidth_optimized:
+			if 	(newResult.getWriteBandwidth() > getWriteBandwidth())
 				toUpdate = true;
 			break;
 		case area_optimized:
@@ -159,6 +198,12 @@ string Result::printOptimizationTarget() {
         break;
     case write_edp_optimized:
         rv = "Write Energy-Delay-Product";
+        break;
+    case read_bandwidth_optimized:
+        rv = "Read Bandwidth";
+        break;
+    case write_bandwidth_optimized:
+        rv = "Write Bandwidth";
         break;
     case area_optimized:
         rv = "Area";
@@ -423,7 +468,7 @@ void Result::print(int indent) {
 	cout << string(indent, ' ') << "       |--- Mux Latency         = " << TO_SECOND(bank->subarray.mat.bitlineMux.readLatency
 													+ bank->subarray.mat.senseAmpMuxLev1.readLatency
 													+ bank->subarray.mat.senseAmpMuxLev2.readLatency) << endl;
-	if (bank->subarray.memoryType == tag && bank->subarray.internalSenseAmp)
+	if (bank->subarray.memoryType == MemoryType::tag && bank->subarray.internalSenseAmp)
 		cout << string(indent, ' ') << "    |--- Comparator Latency  = " << TO_SECOND(bank->subarray.comparator.readLatency) << endl;
 
 	if (cell->memCellType == PCRAM || cell->memCellType == FBRAM ||
@@ -518,19 +563,11 @@ void Result::print(int indent) {
 		cout << string(indent, ' ') << "    |--- Mat Latency   = " << TO_SECOND(bank->subarray.mat.refreshLatency) << endl;
     }
 
-	double readBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.readLatency - bank->subarray.mat.rowDecoder.readLatency
-			+ bank->subarray.mat.precharger.readLatency) / 8;
-	if (cell->memCellType == gcDRAM) {
-		readBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.readLatency - bank->subarray.mat.gcRowDecoder.readLatency
-			+ bank->subarray.mat.precharger.readLatency) / 8;
-	}
+	double readBandwidth = getReadBandwidth();
 	//cout << "DEBUGGING: bank blockSize - " << bank->blockSize << endl;
 	//cout << "DEBUGGING: mat readLatency - " << TO_SECOND(bank->subarray.mat.readLatency) << ", decoder readLatency - " << TO_SECOND(bank->subarray.mat.rowDecoder.readLatency) << ", precharger latency - " << TO_SECOND(bank->subarray.mat.precharger.readLatency) << endl;
 	cout << string(indent, ' ') << " - Read Bandwidth  = " << TO_BPS(readBandwidth) << endl;
-	double writeBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.writeLatency) / 8;
+	double writeBandwidth = getWriteBandwidth();
 	cout << string(indent, ' ') << " - Write Bandwidth = " << TO_BPS(writeBandwidth) << endl;
 
 	cout << string(indent, ' ') << "Power:" << endl;
@@ -992,7 +1029,7 @@ void Result::printToFile(int indent, const string &FileName) {
 	outFile << string(indent, ' ') << "       |--- Mux Latency         = " << TO_SECOND(bank->subarray.mat.bitlineMux.readLatency
 													+ bank->subarray.mat.senseAmpMuxLev1.readLatency
 													+ bank->subarray.mat.senseAmpMuxLev2.readLatency) << endl;
-	if (bank->subarray.memoryType == tag && bank->subarray.internalSenseAmp)
+	if (bank->subarray.memoryType == MemoryType::tag && bank->subarray.internalSenseAmp)
 		outFile << string(indent, ' ') << "    |--- Comparator Latency  = " << TO_SECOND(bank->subarray.comparator.readLatency) << endl;
 
 	if (cell->memCellType == PCRAM || cell->memCellType == FBRAM ||
@@ -1087,19 +1124,11 @@ void Result::printToFile(int indent, const string &FileName) {
 		outFile << string(indent, ' ') << "    |--- Mat Latency   = " << TO_SECOND(bank->subarray.mat.refreshLatency) << endl;
     }
 
-	double readBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.readLatency - bank->subarray.mat.rowDecoder.readLatency
-			+ bank->subarray.mat.precharger.readLatency) / 8;
-	if (cell->memCellType == gcDRAM) {
-		readBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.readLatency - bank->subarray.mat.gcRowDecoder.readLatency
-			+ bank->subarray.mat.precharger.readLatency) / 8;
-	}
+	double readBandwidth = getReadBandwidth();
 	//outFile << "DEBUGGING: bank blockSize - " << bank->blockSize << endl;
 	//outFile << "DEBUGGING: mat readLatency - " << TO_SECOND(bank->subarray.mat.readLatency) << ", decoder readLatency - " << TO_SECOND(bank->subarray.mat.rowDecoder.readLatency) << ", precharger latency - " << TO_SECOND(bank->subarray.mat.precharger.readLatency) << endl;
 	outFile << string(indent, ' ') << " - Read Bandwidth  = " << TO_BPS(readBandwidth) << endl;
-	double writeBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.writeLatency) / 8;
+	double writeBandwidth = getWriteBandwidth();
 	outFile << string(indent, ' ') << " - Write Bandwidth = " << TO_BPS(writeBandwidth) << endl;
 
 	outFile << string(indent, ' ') << "Power:" << endl;
@@ -1273,7 +1302,7 @@ void Result::printToFile(int indent, const string &FileName) {
 }
 
 void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
-	if (bank->memoryType != data || tagResult.bank->memoryType != tag) {
+	if (bank->memoryType != MemoryType::data || tagResult.bank->memoryType != MemoryType::tag) {
 		cout << "This is not a valid cache configuration." << endl;
 		return;
 	} else {
@@ -1453,7 +1482,7 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
         return;
     }
 
-    if (bank->memoryType != data) {
+    if (bank->memoryType != MemoryType::data) {
         outFile << "This is not a valid cache configuration." << endl;
         outFile.close();
         return;
@@ -1751,7 +1780,7 @@ void Result::printToCsvFile(ofstream &outputFile) {
 }
 
 void Result::printAsCacheToCsvFile(Result &tagResult, CacheAccessMode cacheAccessMode, ofstream &outputFile) {
-	if (bank->memoryType != data || tagResult.bank->memoryType != tag) {
+	if (bank->memoryType != MemoryType::data || tagResult.bank->memoryType != MemoryType::tag) {
 		cout << "This is not a valid cache configuration." << endl;
 		return;
 	} else {

@@ -184,6 +184,7 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 
 	double MIN_CELL_HEIGHT = MAX_TRANSISTOR_HEIGHT;  //set real layout cell height
 	double MIN_CELL_WIDTH = (MIN_GAP_BET_GATE_POLY + POLY_WIDTH) * 2;  //set real layout cell width
+	// NSCACHE_UNUSED_KEEP: retained from NeurSim 1.4 cell-relaxation geometry for future layout use.
 	double ISOLATION_REGION = MIN_POLY_EXT_DIFF*2 + MIN_GAP_BET_FIELD_POLY; // 1.4 update : new variable
 
 	/* Add cell relaxation parameters from NeurSim 1.4 */
@@ -224,6 +225,7 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 			MIN_CELL_WIDTH  *= (CPP_1nm/(MIN_GAP_BET_GATE_POLY + POLY_WIDTH));
 			break;
 	}
+	(void)ISOLATION_REGION;
 
 	/* Derived parameters */
 	numSenseAmp = numColumn / muxSenseAmp;
@@ -824,9 +826,10 @@ void Mat::CalculateLatency(double _rampInput) {
 			double beta = 1 / (resPullDown * gm);
 			double bitlineRamp = 0;
 			// From NeuroSim - Elmore BL (from IDRS 2022: More Moore)
-			double BLCap_perCell = capBitline / numRow + capCellAccess; // Anni update
-			double BLRes_perCell = resBitline / numRow;
-			double Elmore_BL = (resCellAccess + resPullDown) * BLCap_perCell * numRow   + BLCap_perCell * BLRes_perCell * numRow  * ( numRow +1 )  /2;
+			// NSCACHE_UNUSED_KEEP: retained for the alternate Elmore bitline-delay path below.
+			// double BLCap_perCell = capBitline / numRow + capCellAccess; // Anni update
+			// double BLRes_perCell = resBitline / numRow;
+			// double Elmore_BL = (resCellAccess + resPullDown) * BLCap_perCell * numRow   + BLCap_perCell * BLRes_perCell * numRow  * ( numRow +1 )  /2;
 			//bitlineDelay = Elmore_BL * log(tech->vdd / (tech->vdd - cell->minSenseVoltage / 2));
 			bitlineDelay = horowitz(tau, beta, rowDecoder.rampOutput, &bitlineRamp);
 			bitlineMux.CalculateLatency(bitlineRamp);
@@ -1274,9 +1277,10 @@ void Mat::CalculateRepeater(int numCol){
 	double optEDP, currentEDP, currentEnergy, currentDelay;
 	double repeater_leakage;
 	double repeater_readDynamicEnergy;
-	double repeater_writeDynamicEnergy;
-	double repeater_readDynamicEnergyMux;
-	double repeater_writeDynamicEnergyMux;
+	// NSCACHE_UNUSED_KEEP: retained for future write/mux-aware repeater energy accounting.
+	// double repeater_writeDynamicEnergy;
+	// double repeater_readDynamicEnergyMux;
+	// double repeater_writeDynamicEnergyMux;
 	double sectionresLoc, sectioncapLoc, targetdriveresLoc, widthInvNLoc, widthInvPLoc;
 	double resPullDown;
 	double capLoad;

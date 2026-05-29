@@ -35,7 +35,8 @@ void OutputDriver::Initialize(double _logicEffort, double _inputCap, double _out
 	addRepeaters = _addRepeaters;
 	wireLength = _wireLength;
 
-	double sizingfactor_MUX = 1;
+	// NSCACHE_UNUSED_KEEP: retained for possible mux-aware driver sizing.
+	// double sizingfactor_MUX = 1;
 	
 	double minNMOSDriverWidth = minDriverCurrent / tech->currentOnNmos[inputParameter->temperature - 300];
 	minNMOSDriverWidth = MAX(MIN_NMOS_SIZE * tech->featureSize, minNMOSDriverWidth);

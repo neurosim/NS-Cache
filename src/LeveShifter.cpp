@@ -199,6 +199,10 @@ void LevelShifter::CalculatePower(double activityRowRead) {
 }
 
 
+void LevelShifter::PrintProperty() {
+	PrintProperty("LevelShifter Properties:");
+}
+
 void LevelShifter::PrintProperty(const char* str) {
 	//cout << "LevelShifter Properties:" << endl;
 	cout << str << endl;

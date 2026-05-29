@@ -175,6 +175,10 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 				optimizationTarget = read_edp_optimized;
 			else if (!strcmp(tmp, "WriteEDP"))
 				optimizationTarget = write_edp_optimized;
+			else if (!strcmp(tmp, "ReadBandwidth"))
+				optimizationTarget = read_bandwidth_optimized;
+			else if (!strcmp(tmp, "WriteBandwidth"))
+				optimizationTarget = write_bandwidth_optimized;
 			else if (!strcmp(tmp, "LeakagePower"))
 				optimizationTarget = leakage_optimized;
 			else if (!strcmp(tmp, "Area"))
@@ -770,6 +774,12 @@ void InputParameter::PrintInputParameter() {
 			break;
 		case write_edp_optimized:
 			cout << "write energy-delay-product ..." << endl;
+			break;
+		case read_bandwidth_optimized:
+			cout << "read bandwidth ..." << endl;
+			break;
+		case write_bandwidth_optimized:
+			cout << "write bandwidth ..." << endl;
 			break;
 		case leakage_optimized:
 			cout << "leakage power ..." << endl;

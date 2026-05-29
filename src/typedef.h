@@ -124,9 +124,11 @@ enum OptimizationTarget
 	write_energy_optimized = 3,
 	read_edp_optimized = 4,
 	write_edp_optimized = 5,
-	leakage_optimized = 6,
-	area_optimized = 7,
-	full_exploration = 8
+	read_bandwidth_optimized = 6,
+	write_bandwidth_optimized = 7,
+	leakage_optimized = 8,
+	area_optimized = 9,
+	full_exploration = 10
 };
 
 enum CacheAccessMode

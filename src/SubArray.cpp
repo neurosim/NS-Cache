@@ -85,7 +85,7 @@ void SubArray::Initialize(int _numRowMat, int _numColumnMat, int _numAddressBit,
 
 	/* Determine the number of rows in a mat */
 	numRow = 1 << _numAddressBit;
-	if (memoryType == data)
+	if (memoryType == MemoryType::data)
 		numRow *= numWay;	/* Only for cache design that partitions a set into multiple rows */
 	numRow /= (muxSenseAmp * muxOutputLev1 * muxOutputLev2);	/* Distribute to column decoding */
 	if (numRow == 0) {
@@ -102,7 +102,7 @@ void SubArray::Initialize(int _numRowMat, int _numColumnMat, int _numAddressBit,
 	}
 
 	numColumn *= muxSenseAmp * muxOutputLev1 * muxOutputLev2;
-	if (memoryType == tag)
+	if (memoryType == MemoryType::tag)
 		numColumn *= numWay;
 
 	mat.Initialize(numRow, numColumn, numRowPerSet > 1, true /* TO-DO: need to correct */,
@@ -173,7 +173,7 @@ void SubArray::Initialize(int _numRowMat, int _numColumnMat, int _numAddressBit,
     totalPredecoderOutputBits += 1 << numAddressSenseAmpMuxLev2PredecoderBlock1; 
     totalPredecoderOutputBits += 1 << numAddressSenseAmpMuxLev2PredecoderBlock2; 
 
-	if (memoryType == tag && internalSenseAmp) {
+	if (memoryType == MemoryType::tag && internalSenseAmp) {
 		comparator.Initialize(numDataBit, 0 /*TO-DO: need to fix */);
 	}
 
@@ -234,7 +234,7 @@ void SubArray::CalculateArea() {
                 height += sqrt(areaAllPredecoderBlocks);
         }
 
-		if (memoryType == tag && internalSenseAmp) {
+		if (memoryType == MemoryType::tag && internalSenseAmp) {
 			comparator.CalculateArea();
             areaAllLogicBlocks += comparator.area;
             // TSVs for comparator are added above in previous conditional
@@ -260,7 +260,7 @@ void SubArray::CalculateRC() {
 		senseAmpMuxLev1PredecoderBlock2.CalculateRC();
 		senseAmpMuxLev2PredecoderBlock1.CalculateRC();
 		senseAmpMuxLev2PredecoderBlock2.CalculateRC();
-		if (memoryType == tag && internalSenseAmp) {
+		if (memoryType == MemoryType::tag && internalSenseAmp) {
 			comparator.CalculateRC();
 		}
 	}
@@ -325,7 +325,7 @@ void SubArray::CalculateLatency(double _rampInput) {
         refreshLatency = predecoderLatency + mat.refreshLatency;
         refreshLatency *= numColumnMat; // TOTAL refresh time for all mats
 
-		if (memoryType == tag && internalSenseAmp) {
+		if (memoryType == MemoryType::tag && internalSenseAmp) {
 			comparator.CalculateLatency(_rampInput);
 			readLatency += comparator.readLatency;
 		}
@@ -388,7 +388,7 @@ void SubArray::CalculatePower() {
             leakage += tsvArray.numTotalBits * (stackedDieCount-1) * tsvArray.leakage;
         }
 
-		if (memoryType == tag && internalSenseAmp) {
+		if (memoryType == MemoryType::tag && internalSenseAmp) {
 			comparator.CalculatePower();
 			readDynamicEnergy += comparator.readDynamicEnergy * numWay;
 			writeDynamicEnergy += comparator.writeDynamicEnergy * numWay;
@@ -452,7 +452,7 @@ SubArray & SubArray::operator=(const SubArray &rhs) {
 	senseAmpMuxLev1PredecoderBlock2 = rhs.senseAmpMuxLev1PredecoderBlock2;
 	senseAmpMuxLev2PredecoderBlock1 = rhs.senseAmpMuxLev2PredecoderBlock1;
 	senseAmpMuxLev2PredecoderBlock2 = rhs.senseAmpMuxLev2PredecoderBlock2;
-	if (memoryType == tag && internalSenseAmp)
+	if (memoryType == MemoryType::tag && internalSenseAmp)
 		comparator = rhs.comparator;
 
     tsvArray = rhs.tsvArray;
