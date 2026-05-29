@@ -1,7 +1,17 @@
-# NeuroSim (NS)-Cache: An Early Exploration tool for FinFET and Nanosheet Generation Cache Memories
+# NeuroSim (NS)-Cache: An Early Exploration tool for FinFET and Nanosheet Generation Cache Memories 
+<p>
+  <img src="./icon/neurosim_logo.png" alt="Logo" width="200" align="left" style="margin-right: 20px;" />
+</p>
 
-NeuroSim (NS)-Cache is a framework developed by [Prof. Shimeng Yu's group](https://shimeng.ece.gatech.edu/) (Georgia Institute of Technology) developed for early exploration of cache memories in advanced technology nodes (FinFET, nanosheet, CFET generations). The tool extends previously developed Destiny [2], NVSim [3], and Cacti3dd [4]. The leading-edge nodes transistor technology specifications and PPA at the circuit module are inherited from NeuroSim V1.4 [6]. The model is made publicly available on a non-commercial basis. Copyright of the model is maintained by the developers, and the model is distributed under the terms of the [Creative Commons Attribution-NonCommercial 4.0 International Public License](http://creativecommons.org/licenses/by-nc/4.0/legalcode)
+**NeuroSim (NS)-Cache** is a framework developed by [Prof. Shimeng Yu's group](https://shimeng.ece.gatech.edu/) 
+(Georgia Institute of Technology) for early exploration of cache memories in advanced technology nodes 
+(FinFET, nanosheet, CFET generations). The tool extends previously developed Destiny [2], NVSim [3], 
+and Cacti3dd [4]. The leading-edge nodes transistor technology specifications and PPA at the circuit 
+module are inherited from NeuroSim V1.4 [6]. The model is made publicly available on a non-commercial basis. 
+Copyright of the model is maintained by the developers, and the model is distributed under the terms of the 
+[Creative Commons Attribution-NonCommercial 4.0 International Public License](http://creativecommons.org/licenses/by-nc/4.0/legalcode).
 
+<br clear="left"/>
 If you use the tool or adapt the tool in your work or publication, please cite the following reference:
 
 * F. Waqar, J. Kwak, J. Lee, M. Shon, O. Phadke, M. Gholamrezaei, K. Skadron, S. Yu, ※Optimization and Benchmarking of Monolithically Stackable Gain Cell Memory for Last-Level Cache, *§ IEEE Transactions Computers (T-Computer), 2025.*
