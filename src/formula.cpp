@@ -99,15 +99,17 @@ double CalculateGateArea(
 	
     double	ratio = widthPMOS / (widthPMOS + widthNMOS);
     double maxWidthPMOS, maxWidthNMOS;
-    int maxNumPFin, maxNumNFin;	/* Max number of fins for the specified cell height */
+    int maxNumPFin = 0, maxNumNFin = 0;	/* Max number of fins for the specified cell height */
     double unitWidthRegionP, unitWidthRegionN;
     double widthRegionP, widthRegionN;
+    // NSCACHE_UNUSED_KEEP: retained from the NeurSim layout derivation for future region-height checks.
     double heightRegionP, heightRegionN;
     int numFoldedPMOS = 1, numFoldedNMOS = 1;
 
     // 1.4 update: add GAA - related variables
-    int NumPSheet=0;
-    int NumNSheet=0;
+    // NSCACHE_UNUSED_KEEP: outer sheet counters kept as breadcrumbs; active counters are scoped below.
+    // int NumPSheet=0;
+    // int NumNSheet=0;
     double maxNumPSheet=0;
     double maxNumNSheet=0;
 
@@ -193,11 +195,15 @@ double CalculateGateArea(
             maxNumPFin =  maxNumNFin = tech.max_fin_num;
         } else if (tech.featureSize == 2 * 1e-9) {
             maxNumPSheet= maxNumNSheet = tech.max_fin_per_GAA;
-        } else if (tech.featureSize == 1 * 1e-9) {
-            maxNumPSheet= maxNumNSheet = tech.max_fin_per_GAA;
-        } 
+	        } else if (tech.featureSize == 1 * 1e-9) {
+	            maxNumPSheet= maxNumNSheet = tech.max_fin_per_GAA;
+	        } else if (tech.featureSize > 2 * 1e-9) {
+	            maxNumPFin = maxNumNFin = tech.max_fin_num;
+	        } else {
+	            maxNumPSheet = maxNumNSheet = tech.max_fin_per_GAA;
+	        }
 
-        }
+	        }
 
         else {
 
@@ -214,9 +220,13 @@ double CalculateGateArea(
             maxNumPFin = maxNumNFin = (floor)( ( (heightTransistorRegion -  (double) MIN_GAP_BET_P_AND_N_DIFFS_3nm * tech.featureSize -  (double) OUTER_HEIGHT_REGION_3nm * tech.featureSize) + tech.PitchFin ) / 2.0 / (tech.widthFin + tech.PitchFin) );
         } else if (tech.featureSize == 2 * 1e-9) {
             maxNumPSheet= maxNumNSheet =  (floor)( ( (heightTransistorRegion -  (double) MIN_GAP_BET_P_AND_N_DIFFS_2nm * tech.featureSize -  (double) OUTER_HEIGHT_REGION_2nm * tech.featureSize) + tech.PitchFin ) / 2.0 / (tech.widthFin + tech.PitchFin) );
-        } else if (tech.featureSize == 1 * 1e-9) {
-            maxNumPSheet= maxNumNSheet = (floor)( ( (heightTransistorRegion -  (double) MIN_GAP_BET_P_AND_N_DIFFS_1nm * tech.featureSize -  (double) OUTER_HEIGHT_REGION_1nm* tech.featureSize) + tech.PitchFin ) / 2.0 / (tech.widthFin + tech.PitchFin) );
-        } 
+	        } else if (tech.featureSize == 1 * 1e-9) {
+	            maxNumPSheet= maxNumNSheet = (floor)( ( (heightTransistorRegion -  (double) MIN_GAP_BET_P_AND_N_DIFFS_1nm * tech.featureSize -  (double) OUTER_HEIGHT_REGION_1nm* tech.featureSize) + tech.PitchFin ) / 2.0 / (tech.widthFin + tech.PitchFin) );
+	        } else if (tech.featureSize > 2 * 1e-9) {
+	            maxNumPFin = maxNumNFin = tech.max_fin_num;
+	        } else {
+	            maxNumPSheet = maxNumNSheet = tech.max_fin_per_GAA;
+	        }
             
 
         }
@@ -401,6 +411,8 @@ double CalculateGateArea(
 
     *width = MAX(widthRegionN, widthRegionP);
     *height = heightTransistorRegion;	// Fixed standard cell height
+    (void)heightRegionP;
+    (void)heightRegionN;
 
     return (*width)*(*height);
 }
@@ -529,8 +541,9 @@ void CalculateGateCapacitance(
 		if (capInput)
 			*(capInput) = CalculateGateCap(widthNMOS, tech) + CalculateGateCap(widthPMOS, tech);
 	} else {
-		int speciallayout = 0;
-    if (heightTransistorRegion != tech.featureSize *MAX_TRANSISTOR_HEIGHT) speciallayout = 1;
+		// NSCACHE_UNUSED_KEEP: retained for future special-layout capacitance handling.
+		// int speciallayout = 0;
+    // if (heightTransistorRegion != tech.featureSize *MAX_TRANSISTOR_HEIGHT) speciallayout = 1;
 
 
 	if (capInput){
@@ -591,9 +604,10 @@ void CalculateGateCapacitance(
 	    
 		
 		// 1.4 update: add GAA-related parameters
-        int NumPSheet;
-        int NumNSheet;
-        int maxNumSheet;
+        // NSCACHE_UNUSED_KEEP: outer sheet counters kept as breadcrumbs; active counters are scoped below.
+        // int NumPSheet;
+        // int NumNSheet;
+        // int maxNumSheet;
         int maxNumPSheet; 
         int maxNumNSheet; 
 
@@ -1171,7 +1185,12 @@ double CalculateWireResistance_M0(
 		return(alphaScatter * resistivity / (wireThickness - barrierThickness - dishingThickness)
 			/ (wireWidth - 2 * barrierThickness));
 	} else {
-		double Metal0, Metal1, wirewidth, barrierthickness, featuresize;
+		double Metal0 = wireWidth * 1e9;
+		double Metal1 = wireWidth * 1e9;
+		double wirewidth = wireWidth * 1e9;
+		double barrierthickness = barrierThickness;
+		// NSCACHE_UNUSED_KEEP: feature-size fallback retained for custom wire tables.
+		double featuresize = wireWidth;
 		switch (tech.featureSizeInNano){
 			case 130: 	Metal0=175; Metal1=175; wirewidth=175; barrierthickness=10.0e-9; featuresize = wirewidth*1e-9; break;  
 			case 90: 	Metal0=110; Metal1=110; wirewidth=110; barrierthickness=10.0e-9; featuresize = wirewidth*1e-9; break;  
@@ -1189,6 +1208,7 @@ double CalculateWireResistance_M0(
 			case -1:	break;	
 			default:	exit(-1); puts("Wire width out of range"); 
 		}
+		(void)featuresize;
 
 		double AR, Rho;
 		// 1.4 update: wirewidth
@@ -1316,9 +1336,10 @@ double CalculateWireResistance_M0(
 
 		Rho_Metal1 = Rho_Metal1 * 1 / (1- ( (2*AR_Metal1*Metal1 + Metal1)*barrierthickness / (AR_Metal1*pow(Metal1,2) ) ));
 
-		double Metal0_unitwireresis, Metal1_unitwireresis;
+		double Metal0_unitwireresis;
 		Metal0_unitwireresis =  Rho_Metal0 / ( Metal0*1e-9 * Metal0*1e-9 * AR_Metal0 );
-		Metal1_unitwireresis =  Rho_Metal1 / ( Metal1*1e-9 * Metal1*1e-9 * AR_Metal1 );
+		// NSCACHE_UNUSED_KEEP: retained for paired M0/MX wire calibration.
+		// double Metal1_unitwireresis =  Rho_Metal1 / ( Metal1*1e-9 * Metal1*1e-9 * AR_Metal1 );
 
 		return Metal0_unitwireresis;
 	}
@@ -1331,7 +1352,12 @@ double CalculateWireResistance_MX(
 		return(alphaScatter * resistivity / (wireThickness - barrierThickness - dishingThickness)
 			/ (wireWidth - 2 * barrierThickness));
 	} else {
-		double Metal0, Metal1, wirewidth, barrierthickness, featuresize;
+		double Metal0 = wireWidth * 1e9;
+		double Metal1 = wireWidth * 1e9;
+		double wirewidth = wireWidth * 1e9;
+		double barrierthickness = barrierThickness;
+		// NSCACHE_UNUSED_KEEP: feature-size fallback retained for custom wire tables.
+		double featuresize = wireWidth;
 		switch (tech.featureSizeInNano){
 			case 130: 	Metal0=175; Metal1=175; wirewidth=175; barrierthickness=10.0e-9; featuresize = wirewidth*1e-9; break;  
 			case 90: 	Metal0=110; Metal1=110; wirewidth=110; barrierthickness=10.0e-9; featuresize = wirewidth*1e-9; break;  
@@ -1349,6 +1375,7 @@ double CalculateWireResistance_MX(
 			case -1:	break;	
 			default:	exit(-1); puts("Wire width out of range"); 
 		}
+		(void)featuresize;
 
 		double AR, Rho;
 		// 1.4 update: wirewidth
@@ -1476,8 +1503,9 @@ double CalculateWireResistance_MX(
 
 		Rho_Metal1 = Rho_Metal1 * 1 / (1- ( (2*AR_Metal1*Metal1 + Metal1)*barrierthickness / (AR_Metal1*pow(Metal1,2) ) ));
 
-		double Metal0_unitwireresis, Metal1_unitwireresis;
-		Metal0_unitwireresis =  Rho_Metal0 / ( Metal0*1e-9 * Metal0*1e-9 * AR_Metal0 );
+		// NSCACHE_UNUSED_KEEP: retained for paired M0/MX wire calibration.
+		// double Metal0_unitwireresis =  Rho_Metal0 / ( Metal0*1e-9 * Metal0*1e-9 * AR_Metal0 );
+		double Metal1_unitwireresis;
 		Metal1_unitwireresis =  Rho_Metal1 / ( Metal1*1e-9 * Metal1*1e-9 * AR_Metal1 );
 
 		return Metal1_unitwireresis;
@@ -1489,10 +1517,11 @@ void EnlargeSize(double *widthNMOS, double *widthPMOS, double heightTransistorRe
     double	ratio = *widthPMOS / (*widthPMOS + *widthNMOS);
     double maxWidthPMOS, maxWidthNMOS;
     int maxNumPFin, maxNumNFin;	/* Max number of fins for the specified cell height */
-    double unitWidthRegionP, unitWidthRegionN;
-    double widthRegionP, widthRegionN;
-    double heightRegionP, heightRegionN;
-    int numFoldedPMOS = 1, numFoldedNMOS = 1;
+    // NSCACHE_UNUSED_KEEP: retained for future region-aware EnlargeSize logic.
+    // double unitWidthRegionP, unitWidthRegionN;
+    // double widthRegionP, widthRegionN;
+    // double heightRegionP, heightRegionN;
+    // int numFoldedPMOS = 1, numFoldedNMOS = 1;
 
     double temp_widthPMOS = *widthPMOS;
     double temp_widthNMOS = *widthNMOS;

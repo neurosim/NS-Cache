@@ -40,7 +40,7 @@ public:
 
 	/* Properties */
 	DesignTarget designTarget;		/* Cache, RAM, or CAM */
-	OptimizationTarget optimizationTarget;	/* Either read latency, write latency, read energy, write energy, leakage, or area */
+	OptimizationTarget optimizationTarget;	/* Either latency, energy, EDP, bandwidth, leakage, or area */
 	int processNode;				/* Process node (nm) */
 	int64_t capacity;				/* Memory/cache capacity, Unit: Byte */
 	long wordWidth;					/* The width of each input/output word, Unit: bit */

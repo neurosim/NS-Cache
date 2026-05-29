@@ -47,6 +47,7 @@ void Technology::Initialize(int _featureSizeInNano, DeviceRoadmap _deviceRoadmap
 	featureSizeInNano = _featureSizeInNano;
 	featureSize = _featureSizeInNano * 1e-9;
 	deviceRoadmap = _deviceRoadmap;
+	vpp = 0;
 
 	if (_featureSizeInNano >= 180) { //TO-DO : only for test
 		if (_deviceRoadmap == HP) {
@@ -2456,6 +2457,10 @@ void Technology::Initialize(int _featureSizeInNano, DeviceRoadmap _deviceRoadmap
     /* For non-DRAM types vpp is equal to vdd. */
     if (_deviceRoadmap != EDRAM) {
         vpp = vdd;
+    } else if (vpp == 0) {
+        /* Advanced-node eDRAM has no separate table here; keep the legacy
+         * wordline boost offset instead of leaving vpp uninitialized. */
+        vpp = vdd + 0.5;
     }
 
 	if (_featureSizeInNano >= 22) {
@@ -2535,6 +2540,7 @@ void Technology::PrintProperty() {
 void Technology::InterpolateWith(Technology rhs, double _alpha) {
 	if (featureSizeInNano != rhs.featureSizeInNano) {
 		vdd = (1 - _alpha) * vdd + _alpha * rhs.vdd;
+		vpp = (1 - _alpha) * vpp + _alpha * rhs.vpp;
 		vth = (1 - _alpha) * vth + _alpha * rhs.vth;
 		phyGateLength = (1 - _alpha) * phyGateLength + _alpha * rhs.phyGateLength;
 		capIdealGate = (1 - _alpha) * capIdealGate + _alpha * rhs.capIdealGate;
@@ -2567,19 +2573,19 @@ void Technology::InterpolateWith(Technology rhs, double _alpha) {
 		vdsatPmos = phyGateLength * 1e5 /* Silicon saturatio velocity, Unit: m/s */ / effectiveHoleMobility;
 
 		// new technology parameters
-		max_sheet_num = max_sheet_num;
-		thickness_sheet = thickness_sheet;
-		width_sheet = width_sheet;
-		effective_width = effective_width;
-		max_fin_num = max_fin_num;
+		max_sheet_num = (1 - _alpha) * max_sheet_num + _alpha * rhs.max_sheet_num;
+		thickness_sheet = (1 - _alpha) * thickness_sheet + _alpha * rhs.thickness_sheet;
+		width_sheet = (1 - _alpha) * width_sheet + _alpha * rhs.width_sheet;
+		effective_width = (1 - _alpha) * effective_width + _alpha * rhs.effective_width;
+		max_fin_num = (1 - _alpha) * max_fin_num + _alpha * rhs.max_fin_num;
 		max_fin_per_GAA = rhs.max_fin_per_GAA;
 		gm_oncurrent = (1 - _alpha) * gm_oncurrent + _alpha * rhs.gm_oncurrent;  // gm at on current
 		cap_draintotal = (1 - _alpha) * cap_draintotal + _alpha * rhs.cap_draintotal;
 		current_gmNmos = (1 - _alpha) * current_gmNmos + _alpha * rhs.current_gmNmos;		/* NMOS current at 0.7*vdd for gm calculation, Unit: A/m/V*/ 
     	current_gmPmos = (1 - _alpha) * current_gmPmos + _alpha * rhs.current_gmPmos;		/* PMOS current at 0.7*vdd for gm calculation, Unit: A/m/V*/
-		heightFin = heightFin;	/* Fin height, Unit: m */
-		widthFin = widthFin;	/* Fin width, Unit: m */
-		PitchFin = PitchFin;	/* Fin pitch, Unit: m */
+		heightFin = (1 - _alpha) * heightFin + _alpha * rhs.heightFin;	/* Fin height, Unit: m */
+		widthFin = (1 - _alpha) * widthFin + _alpha * rhs.widthFin;	/* Fin width, Unit: m */
+		PitchFin = (1 - _alpha) * PitchFin + _alpha * rhs.PitchFin;	/* Fin pitch, Unit: m */
 	}
 }
 
@@ -2751,4 +2757,3 @@ void Technology::SetLayerCount(InputParameter *inputParameter, int layers)
 
     layerCount = layers;
 }
-

@@ -119,7 +119,7 @@ void BankWithoutHtree::Initialize(int _numRowSubArray, int _numColumnSubArray, l
 	numDataBitRouteToSubArray = blockSize;
 
 
-	if (memoryType == data) { /* Data array */
+	if (memoryType == MemoryType::data) { /* Data array */
 		numDataBitRouteToSubArray = blockSize / numActiveSubArrayPerColumn / numActiveSubArrayPerRow;
 		if (numRowPerSet > associativity) {
 			/* There is no enough ways to distribute into multiple rows */
@@ -149,7 +149,7 @@ void BankWithoutHtree::Initialize(int _numRowSubArray, int _numColumnSubArray, l
 				muxOutputLev2 *= extraMuxOutputLev2;
 			}
 		}
-	} else if (memoryType == tag) { /* Tag array */
+	} else if (memoryType == MemoryType::tag) { /* Tag array */
 		if (numRowPerSet > 1) {
 			/* tag array cannot have multiple rows to contain ways in a set, otherwise the bitline has to be shared */
 			invalid = true;
@@ -201,7 +201,7 @@ void BankWithoutHtree::Initialize(int _numRowSubArray, int _numColumnSubArray, l
 		}
 
 		int numSenseAmp;
-		if (memoryType == data)
+		if (memoryType == MemoryType::data)
 			numSenseAmp = blockSize;
 		else
 			numSenseAmp = blockSize * associativity;
@@ -216,7 +216,7 @@ void BankWithoutHtree::Initialize(int _numRowSubArray, int _numColumnSubArray, l
 		globalBitlineMux.Initialize(numRowSubArray * numColumnSubArray / numActiveSubArrayPerColumn / numActiveSubArrayPerRow, numSenseAmp, globalSenseAmp.capLoad, globalSenseAmp.capLoad, 0);
 		globalBitlineMux.CalculateRC();
 
-		if (memoryType == tag)
+		if (memoryType == MemoryType::tag)
 			globalComparator.Initialize(blockSize, 0 /* TO-DO: only for test */);
 	}
 
@@ -261,14 +261,14 @@ void BankWithoutHtree::CalculateArea() {
 			height += globalSenseAmp.height;
 			globalBitlineMux.CalculateArea();
 			height += globalBitlineMux.height;
-			if (memoryType == tag) {
+			if (memoryType == MemoryType::tag) {
 				globalComparator.CalculateArea();
 				height += associativity * globalComparator.area / width;
 			}
 		}
 
 		/* Determine if the aspect ratio meets the constraint */
-		if (memoryType == data)
+		if (memoryType == MemoryType::data)
 			if (height / width > CONSTRAINT_ASPECT_RATIO_BANK || width / height > CONSTRAINT_ASPECT_RATIO_BANK) {
 				/* illegal */
 				invalid = true;
@@ -310,7 +310,7 @@ void BankWithoutHtree::CalculateRC() {
 		if (!internalSenseAmp) {
 			globalBitlineMux.CalculateRC();
 			globalSenseAmp.CalculateRC();
-			if (memoryType == tag)
+			if (memoryType == MemoryType::tag)
 				globalComparator.CalculateRC();
 		}
 	}
@@ -349,7 +349,7 @@ void BankWithoutHtree::CalculateLatencyAndPower() {
                     refreshLatency += latency;
 				}
 				if (i < numActiveSubArrayPerColumn) {
-					if (memoryType == tag)
+					if (memoryType == MemoryType::tag)
 						numBitRouteToSubArray = numAddressBitRouteToSubArray + numDataBitRouteToSubArray + numWay;
 					else
 						numBitRouteToSubArray = numAddressBitRouteToSubArray + numDataBitRouteToSubArray;
@@ -453,7 +453,7 @@ void BankWithoutHtree::CalculateLatencyAndPower() {
 			readDynamicEnergy += (globalBitlineMux.readDynamicEnergy + globalSenseAmp.readDynamicEnergy) * numActiveSubArrayPerRow;
 			writeDynamicEnergy += (globalBitlineMux.writeDynamicEnergy + globalSenseAmp.writeDynamicEnergy) * numActiveSubArrayPerRow;
 			leakage += (globalBitlineMux.leakage + globalSenseAmp.leakage) * numColumnSubArray;
-			if (memoryType == tag) {
+			if (memoryType == MemoryType::tag) {
 				globalComparator.CalculateLatency(1e40);
 				readLatency += globalComparator.readLatency;
 				globalComparator.CalculatePower();

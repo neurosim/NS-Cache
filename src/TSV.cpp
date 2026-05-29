@@ -85,7 +85,8 @@ void TSV::CalculateArea()
     //Obtain the driver chain area and leakage power for TSV
     double Vdd = tech->vdd;
     double cumulative_area = 0;
-    double cumulative_curr = 0;  // cumulative leakage current
+    // NSCACHE_UNUSED_KEEP: retained for the old leakage-current path.
+    // double cumulative_curr = 0;  // cumulative leakage current
     double cumulative_curr_Ig = 0;  // cumulative leakage current
     buffer_area_height = 50 * tech->featureSize; // the assigned height for memory cell (5um), is it correct to use it here?
     double temperature = (double)inputParameter->temperature;
@@ -100,7 +101,7 @@ void TSV::CalculateArea()
 #ifdef NVSIM3DDEBUG
         cout << "\n\tArea up to the " << i+1 << " stages is: " << cumulative_area * 1e12 << " um2";
 #endif
-        cumulative_curr += CalculateGateLeakage(INV, 1, w_TSV_n[i], w_TSV_p[i], temperature, *tech);
+        // cumulative_curr += CalculateGateLeakage(INV, 1, w_TSV_n[i], w_TSV_p[i], temperature, *tech);
         // TODO -- What's the difference?
         cumulative_curr_Ig += CalculateGateLeakage(INV, 1, w_TSV_n[i], w_TSV_p[i], temperature, *tech);
     }
@@ -258,5 +259,4 @@ TSV& TSV::operator=(const TSV& rhs) {
 
     return *this;
 }
-
 

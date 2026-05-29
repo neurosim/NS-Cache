@@ -54,6 +54,7 @@ MemCell **sweepCells;
 int numRowMat, numColumnMat;
 
 void applyConstraint();
+void initializeTechnology(Technology *target, int processNode, DeviceRoadmap deviceRoadmap);
 int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Result *bestDataResults, Result *bestTagResults);
 
 void tsvVerif(InputParameter *inputParameter)
@@ -104,7 +105,7 @@ void tsvVerif(InputParameter *inputParameter)
                         alpha = (techNodes[node] - 14.0) / 8;
 					} else if (techNodes[node] >= 10) { // 10 nm < technology node <= 14 nm
                         techHigh.Initialize(14, inputParameter->deviceRoadmap, inputParameter);
-                        alpha = (techNodes[node] - 14.0) / 4;
+                        alpha = (techNodes[node] - 10.0) / 4;
 					} else if (techNodes[node] >= 7) { // 7 nm < technology node <= 10 nm
                         techHigh.Initialize(10, inputParameter->deviceRoadmap, inputParameter);
                         alpha = (techNodes[node] - 7.0) / 3;
@@ -173,60 +174,11 @@ int main(int argc, char *argv[])
     //tsvVerif(inputParameter);
 
 	tech = new Technology();
-	tech->Initialize(inputParameter->processNode, inputParameter->deviceRoadmap, inputParameter);
+	initializeTechnology(tech, inputParameter->processNode, inputParameter->deviceRoadmap);
 
 	/* NS-Cache Warning for New Users for NeuroSim Infrastructure */
 	if (inputParameter->temperature > 300 && inputParameter->processNode < 22) cout << "WARNING: NeuroSim sub-22nm nodes on-current only calibrated for room temperature. [V.1.0]\n" << endl;
 
-	Technology techHigh;
-	double alpha = 0;
-	if (inputParameter->processNode > 200){
-		// TO-DO: technology node > 200 nm
-	} else if (inputParameter->processNode > 120) { // 120 nm < technology node <= 200 nm
-		techHigh.Initialize(200, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 120.0) / 60;
-	} else if (inputParameter->processNode > 90) { // 90 nm < technology node <= 120 nm
-		techHigh.Initialize(120, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 90.0) / 30;
-	} else if (inputParameter->processNode > 65) { // 65 nm < technology node <= 90 nm
-		techHigh.Initialize(90, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 65.0) / 25;
-	} else if (inputParameter->processNode > 45) { // 45 nm < technology node <= 65 nm
-		techHigh.Initialize(65, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 45.0) / 20;
-	} else if (inputParameter->processNode >= 32) { // 32 nm < technology node <= 45 nm
-		techHigh.Initialize(45, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 32.0) / 13;
-	} else if (inputParameter->processNode >= 22) { // 22 nm < technology node <= 32 nm
-		techHigh.Initialize(32, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 22.0) / 10;
-	} else if (inputParameter->processNode >= 14) { // 14 nm < technology node <= 22 nm
-		techHigh.Initialize(22, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 14.0) / 8;
-	} else if (inputParameter->processNode >= 10) { // 10 nm < technology node <= 14 nm
-		techHigh.Initialize(14, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 14.0) / 4;
-	} else if (inputParameter->processNode >= 7) { // 7 nm < technology node <= 10 nm
-		techHigh.Initialize(10, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 7.0) / 3;
-	} else if (inputParameter->processNode >= 5) { // 5 nm < technology node <= 7 nm
-		techHigh.Initialize(7, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 5.0) / 2;
-	} else if (inputParameter->processNode >= 3) { // 3 nm < technology node <= 5 nm
-		techHigh.Initialize(5, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 3.0) / 2;
-	} else if (inputParameter->processNode >= 2) { // 2 nm < technology node <= 3 nm
-		techHigh.Initialize(3, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 2.0) / 1;
-	} else if (inputParameter->processNode >= 1) { // 1 nm < technology node <= 2 nm
-		techHigh.Initialize(2, inputParameter->deviceRoadmap, inputParameter);
-		alpha = (inputParameter->processNode - 1.0) / 1;
-	} else {
-		//TO-DO: technology node < 22 nm
-	}
-
-	tech->InterpolateWith(techHigh, alpha);
-	
     /* Open output file for full_exploration. */
     ofstream outputFile;
 	string outputFileName;
@@ -272,9 +224,9 @@ int main(int argc, char *argv[])
         /* In most cases device technology is the same as the peripheral technology. */
         devtech = tech;
 
-        if (cell->memCellType == eDRAM && false) {
+        if (cell->memCellType == eDRAM) {
             devtech = new Technology();
-            devtech->Initialize(inputParameter->processNode, EDRAM, inputParameter);
+            initializeTechnology(devtech, inputParameter->processNode, EDRAM);
         }
 
         if (cellIdx == 0) // Print once only
@@ -292,10 +244,11 @@ int main(int argc, char *argv[])
             totalSolutions += solutions;
         }
 
-        if (cell->memCellType == eDRAM && false) {
+        if (cell->memCellType == eDRAM) {
             delete devtech;
         }
     }
+    cout << "[Info] Cell exploration failures: " << failures << " / " << numCellTypes << endl;
 
     /* Compare against results from previous cell types. */
     if (inputParameter->optimizationTarget == full_exploration 
@@ -368,6 +321,63 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
+void initializeTechnology(Technology *target, int processNode, DeviceRoadmap deviceRoadmap)
+{
+	target->Initialize(processNode, deviceRoadmap, inputParameter);
+
+	Technology techHigh;
+	double alpha = 0;
+	bool interpolate = true;
+	if (processNode > 200){
+		interpolate = false;
+	} else if (processNode > 120) { // 120 nm < technology node <= 200 nm
+		techHigh.Initialize(200, deviceRoadmap, inputParameter);
+		alpha = (processNode - 120.0) / 60;
+	} else if (processNode > 90) { // 90 nm < technology node <= 120 nm
+		techHigh.Initialize(120, deviceRoadmap, inputParameter);
+		alpha = (processNode - 90.0) / 30;
+	} else if (processNode > 65) { // 65 nm < technology node <= 90 nm
+		techHigh.Initialize(90, deviceRoadmap, inputParameter);
+		alpha = (processNode - 65.0) / 25;
+	} else if (processNode > 45) { // 45 nm < technology node <= 65 nm
+		techHigh.Initialize(65, deviceRoadmap, inputParameter);
+		alpha = (processNode - 45.0) / 20;
+	} else if (processNode >= 32) { // 32 nm < technology node <= 45 nm
+		techHigh.Initialize(45, deviceRoadmap, inputParameter);
+		alpha = (processNode - 32.0) / 13;
+	} else if (processNode >= 22) { // 22 nm < technology node <= 32 nm
+		techHigh.Initialize(32, deviceRoadmap, inputParameter);
+		alpha = (processNode - 22.0) / 10;
+	} else if (processNode >= 14) { // 14 nm < technology node <= 22 nm
+		techHigh.Initialize(22, deviceRoadmap, inputParameter);
+		alpha = (processNode - 14.0) / 8;
+	} else if (processNode >= 10) { // 10 nm < technology node <= 14 nm
+		techHigh.Initialize(14, deviceRoadmap, inputParameter);
+		alpha = (processNode - 10.0) / 4;
+	} else if (processNode >= 7) { // 7 nm < technology node <= 10 nm
+		techHigh.Initialize(10, deviceRoadmap, inputParameter);
+		alpha = (processNode - 7.0) / 3;
+	} else if (processNode >= 5) { // 5 nm < technology node <= 7 nm
+		techHigh.Initialize(7, deviceRoadmap, inputParameter);
+		alpha = (processNode - 5.0) / 2;
+	} else if (processNode >= 3) { // 3 nm < technology node <= 5 nm
+		techHigh.Initialize(5, deviceRoadmap, inputParameter);
+		alpha = (processNode - 3.0) / 2;
+	} else if (processNode >= 2) { // 2 nm < technology node <= 3 nm
+		techHigh.Initialize(3, deviceRoadmap, inputParameter);
+		alpha = (processNode - 2.0) / 1;
+	} else if (processNode >= 1) { // 1 nm < technology node <= 2 nm
+		techHigh.Initialize(2, deviceRoadmap, inputParameter);
+		alpha = (processNode - 1.0) / 1;
+	} else {
+		interpolate = false;
+	}
+
+	if (interpolate) {
+		target->InterpolateWith(techHigh, alpha);
+	}
+}
+
 int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Result *bestDataResults, Result *bestTagResults)
 {
 	applyConstraint();
@@ -432,7 +442,7 @@ int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Re
 			}
 			capacity = (long long)inputParameter->capacity * 8 / inputParameter->wordWidth * blockSize;
 			associativity = inputParameter->associativity;
-			CALCULATE(tagBank, tag);
+			CALCULATE(tagBank, MemoryType::tag);
             numDesigns++;
 			if (!tagBank->invalid) {
 				Result tempResult;
@@ -453,7 +463,7 @@ int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Re
 						(bool)isLocalWireLowSwing);
 				for (int i = 0; i < (int)full_exploration; i++) {
 					LOAD_GLOBAL_WIRE(bestTagResults[i]);
-					TRY_AND_UPDATE(bestTagResults[i], tag);
+					TRY_AND_UPDATE(bestTagResults[i], MemoryType::tag);
 				}
 			}
 			/* refine global wire type */
@@ -463,7 +473,7 @@ int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Re
 						(bool)isGlobalWireLowSwing);
 				for (int i = 0; i < (int)full_exploration; i++) {
 					LOAD_LOCAL_WIRE(bestTagResults[i]);
-					TRY_AND_UPDATE(bestTagResults[i], tag);
+					TRY_AND_UPDATE(bestTagResults[i], MemoryType::tag);
 				}
 			}
 		}
@@ -523,7 +533,7 @@ int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Re
         //    // Require at least 32x32 subarrays.
         //    continue;
         //}
-		CALCULATE(dataBank, data);
+		CALCULATE(dataBank, MemoryType::data);
         numDesigns++;
 		if (!dataBank->invalid) {
 			Result tempResult;
@@ -549,7 +559,7 @@ int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Re
 					(bool)isLocalWireLowSwing);
 			for (int i = 0; i < (int)full_exploration; i++) {
 				LOAD_GLOBAL_WIRE(bestDataResults[i]);
-				TRY_AND_UPDATE(bestDataResults[i], data);
+				TRY_AND_UPDATE(bestDataResults[i], MemoryType::data);
 			}
 			if (inputParameter->optimizationTarget == full_exploration && !inputParameter->isPruningEnabled) {
 				OUTPUT_TO_FILE;
@@ -562,7 +572,7 @@ int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Re
 					(bool)isGlobalWireLowSwing);
 			for (int i = 0; i < (int)full_exploration; i++) {
 				LOAD_LOCAL_WIRE(bestDataResults[i]);
-				TRY_AND_UPDATE(bestDataResults[i], data);
+				TRY_AND_UPDATE(bestDataResults[i], MemoryType::data);
 			}
 			if (inputParameter->optimizationTarget == full_exploration && !inputParameter->isPruningEnabled) {
 				OUTPUT_TO_FILE;
@@ -611,6 +621,12 @@ int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Re
 						break;
 					case write_edp_optimized:
 						pruningResults[i][j][k]->limitWriteEdp = bestDataResults[j].bank->writeLatency * bestDataResults[j].bank->writeDynamicEnergy * (1 + (k + 1.0) / 10);
+						break;
+					case read_bandwidth_optimized:
+						pruningResults[i][j][k]->limitReadBandwidth = bestDataResults[j].getReadBandwidth() / (1 + (k + 1.0) / 10);
+						break;
+					case write_bandwidth_optimized:
+						pruningResults[i][j][k]->limitWriteBandwidth = bestDataResults[j].getWriteBandwidth() / (1 + (k + 1.0) / 10);
 						break;
 					case area_optimized:
 						pruningResults[i][j][k]->limitArea = bestDataResults[j].bank->area * (1 + (k + 1.0) / 10);
@@ -666,7 +682,7 @@ int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Re
 				/* To aggressive partitioning */
 				continue;
 			}
-			CALCULATE(dataBank, data);
+			CALCULATE(dataBank, MemoryType::data);
             numDesigns++;
 			if (!dataBank->invalid && dataBank->readLatency <= allowedDataReadLatency && dataBank->writeLatency <= allowedDataWriteLatency
 					&& dataBank->readDynamicEnergy <= allowedDataReadDynamicEnergy && dataBank->writeDynamicEnergy <= allowedDataWriteDynamicEnergy

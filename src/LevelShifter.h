@@ -63,6 +63,7 @@ public:
 	virtual ~LevelShifter();
 
 	/* Functions */
+	void PrintProperty();
 	void PrintProperty(const char* str);
 	void Initialize(int _numOutput, double _activityRowRead, double _writeVoltage, double _holdVoltage);
 	void CalculateArea(double _newHeight, double _newWidth, AreaModify _option);

@@ -175,6 +175,10 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 				optimizationTarget = read_edp_optimized;
 			else if (!strcmp(tmp, "WriteEDP"))
 				optimizationTarget = write_edp_optimized;
+			else if (!strcmp(tmp, "ReadBandwidth"))
+				optimizationTarget = read_bandwidth_optimized;
+			else if (!strcmp(tmp, "WriteBandwidth"))
+				optimizationTarget = write_bandwidth_optimized;
 			else if (!strcmp(tmp, "LeakagePower"))
 				optimizationTarget = leakage_optimized;
 			else if (!strcmp(tmp, "Area"))
@@ -474,7 +478,7 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 		}
 
 		if (!strncmp("-ClockFrequency", line, strlen("-ClockFrequency"))) {
-			sscanf(line, "-ClockFrequency: %d", &clockInput);
+			sscanf(line, "-ClockFrequency: %lf", &clockInput);
 			clockFreq = clockInput;
 			continue;
 		}
@@ -631,19 +635,19 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 		}
 
 		if (!strncmp("-ViewMatStatistics", line, strlen("-ViewMatStatistics"))) {
-			sscanf(line, "-ViewMatStatistics: %lf", tmp);
+			sscanf(line, "-ViewMatStatistics: %s", tmp);
 			viewMatStats = true;
 			continue;
 		}
 
-		if (!strncmp("-ViewQuantization", line, strlen("-VieQuantization"))) {
-			sscanf(line, "-ViewQuantization: %lf", tmp);
+		if (!strncmp("-ViewQuantization", line, strlen("-ViewQuantization"))) {
+			sscanf(line, "-ViewQuantization: %s", tmp);
 			quantize = true;
 			continue;
 		}
 
 		if (!strncmp("-M3DMemory", line, strlen("-M3DMemory"))) {
-			sscanf(line, "-M3DMemory: %lf", tmp);
+			sscanf(line, "-M3DMemory: %s", tmp);
 			monolithic3DMat = true;
 			continue;
 		}
@@ -770,6 +774,12 @@ void InputParameter::PrintInputParameter() {
 			break;
 		case write_edp_optimized:
 			cout << "write energy-delay-product ..." << endl;
+			break;
+		case read_bandwidth_optimized:
+			cout << "read bandwidth ..." << endl;
+			break;
+		case write_bandwidth_optimized:
+			cout << "write bandwidth ..." << endl;
 			break;
 		case leakage_optimized:
 			cout << "leakage power ..." << endl;

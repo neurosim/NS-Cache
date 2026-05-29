@@ -53,6 +53,8 @@ Result::Result() {
 	limitWriteDynamicEnergy = invalid_value;
 	limitReadEdp = invalid_value;
 	limitWriteEdp = invalid_value;
+	limitReadBandwidth = invalid_value_min;
+	limitWriteBandwidth = invalid_value_min;
 	limitArea = invalid_value;
 	limitLeakage = invalid_value;
 
@@ -83,6 +85,33 @@ void Result::reset() {
 	bank->area = invalid_value;
 }
 
+double Result::getReadBandwidth() const {
+	if (bank->readLatency >= invalid_value / 10 || bank->blockSize <= 0)
+		return 0;
+
+	double readCycleLatency = bank->subarray.mat.readLatency - bank->subarray.mat.rowDecoder.readLatency
+			+ bank->subarray.mat.precharger.readLatency;
+	if (cell && cell->memCellType == gcDRAM) {
+		readCycleLatency = bank->subarray.mat.readLatency - bank->subarray.mat.gcRowDecoder.readLatency
+				+ bank->subarray.mat.precharger.readLatency;
+	}
+	if (readCycleLatency <= 0 || readCycleLatency >= invalid_value / 10)
+		return 0;
+
+	return (double)bank->blockSize / readCycleLatency / 8;
+}
+
+double Result::getWriteBandwidth() const {
+	if (bank->writeLatency >= invalid_value / 10 || bank->blockSize <= 0)
+		return 0;
+
+	double writeCycleLatency = bank->subarray.mat.writeLatency;
+	if (writeCycleLatency <= 0 || writeCycleLatency >= invalid_value / 10)
+		return 0;
+
+	return (double)bank->blockSize / writeCycleLatency / 8;
+}
+
 bool Result::compareAndUpdate(Result &newResult) {
     bool toUpdate = false;
 
@@ -90,6 +119,8 @@ bool Result::compareAndUpdate(Result &newResult) {
 			&& newResult.bank->readDynamicEnergy <= limitReadDynamicEnergy && newResult.bank->writeDynamicEnergy <= limitWriteDynamicEnergy
 			&& newResult.bank->readLatency * newResult.bank->readDynamicEnergy <= limitReadEdp
 			&& newResult.bank->writeLatency * newResult.bank->writeDynamicEnergy <= limitWriteEdp
+			&& newResult.getReadBandwidth() >= limitReadBandwidth
+			&& newResult.getWriteBandwidth() >= limitWriteBandwidth
 			&& newResult.bank->area <= limitArea && newResult.bank->leakage <= limitLeakage) {
 		switch (optimizationTarget) {
 		case read_latency_optimized:
@@ -114,6 +145,14 @@ bool Result::compareAndUpdate(Result &newResult) {
 			break;
 		case write_edp_optimized:
 			if 	(newResult.bank->writeLatency * newResult.bank->writeDynamicEnergy < bank->writeLatency * bank->writeDynamicEnergy)
+				toUpdate = true;
+			break;
+		case read_bandwidth_optimized:
+			if 	(newResult.getReadBandwidth() > getReadBandwidth())
+				toUpdate = true;
+			break;
+		case write_bandwidth_optimized:
+			if 	(newResult.getWriteBandwidth() > getWriteBandwidth())
 				toUpdate = true;
 			break;
 		case area_optimized:
@@ -159,6 +198,12 @@ string Result::printOptimizationTarget() {
         break;
     case write_edp_optimized:
         rv = "Write Energy-Delay-Product";
+        break;
+    case read_bandwidth_optimized:
+        rv = "Read Bandwidth";
+        break;
+    case write_bandwidth_optimized:
+        rv = "Write Bandwidth";
         break;
     case area_optimized:
         rv = "Area";
@@ -423,7 +468,7 @@ void Result::print(int indent) {
 	cout << string(indent, ' ') << "       |--- Mux Latency         = " << TO_SECOND(bank->subarray.mat.bitlineMux.readLatency
 													+ bank->subarray.mat.senseAmpMuxLev1.readLatency
 													+ bank->subarray.mat.senseAmpMuxLev2.readLatency) << endl;
-	if (bank->subarray.memoryType == tag && bank->subarray.internalSenseAmp)
+	if (bank->subarray.memoryType == MemoryType::tag && bank->subarray.internalSenseAmp)
 		cout << string(indent, ' ') << "    |--- Comparator Latency  = " << TO_SECOND(bank->subarray.comparator.readLatency) << endl;
 
 	if (cell->memCellType == PCRAM || cell->memCellType == FBRAM ||
@@ -518,19 +563,11 @@ void Result::print(int indent) {
 		cout << string(indent, ' ') << "    |--- Mat Latency   = " << TO_SECOND(bank->subarray.mat.refreshLatency) << endl;
     }
 
-	double readBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.readLatency - bank->subarray.mat.rowDecoder.readLatency
-			+ bank->subarray.mat.precharger.readLatency) / 8;
-	if (cell->memCellType == gcDRAM) {
-		readBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.readLatency - bank->subarray.mat.gcRowDecoder.readLatency
-			+ bank->subarray.mat.precharger.readLatency) / 8;
-	}
+	double readBandwidth = getReadBandwidth();
 	//cout << "DEBUGGING: bank blockSize - " << bank->blockSize << endl;
 	//cout << "DEBUGGING: mat readLatency - " << TO_SECOND(bank->subarray.mat.readLatency) << ", decoder readLatency - " << TO_SECOND(bank->subarray.mat.rowDecoder.readLatency) << ", precharger latency - " << TO_SECOND(bank->subarray.mat.precharger.readLatency) << endl;
 	cout << string(indent, ' ') << " - Read Bandwidth  = " << TO_BPS(readBandwidth) << endl;
-	double writeBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.writeLatency) / 8;
+	double writeBandwidth = getWriteBandwidth();
 	cout << string(indent, ' ') << " - Write Bandwidth = " << TO_BPS(writeBandwidth) << endl;
 
 	cout << string(indent, ' ') << "Power:" << endl;
@@ -992,7 +1029,7 @@ void Result::printToFile(int indent, const string &FileName) {
 	outFile << string(indent, ' ') << "       |--- Mux Latency         = " << TO_SECOND(bank->subarray.mat.bitlineMux.readLatency
 													+ bank->subarray.mat.senseAmpMuxLev1.readLatency
 													+ bank->subarray.mat.senseAmpMuxLev2.readLatency) << endl;
-	if (bank->subarray.memoryType == tag && bank->subarray.internalSenseAmp)
+	if (bank->subarray.memoryType == MemoryType::tag && bank->subarray.internalSenseAmp)
 		outFile << string(indent, ' ') << "    |--- Comparator Latency  = " << TO_SECOND(bank->subarray.comparator.readLatency) << endl;
 
 	if (cell->memCellType == PCRAM || cell->memCellType == FBRAM ||
@@ -1087,19 +1124,11 @@ void Result::printToFile(int indent, const string &FileName) {
 		outFile << string(indent, ' ') << "    |--- Mat Latency   = " << TO_SECOND(bank->subarray.mat.refreshLatency) << endl;
     }
 
-	double readBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.readLatency - bank->subarray.mat.rowDecoder.readLatency
-			+ bank->subarray.mat.precharger.readLatency) / 8;
-	if (cell->memCellType == gcDRAM) {
-		readBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.readLatency - bank->subarray.mat.gcRowDecoder.readLatency
-			+ bank->subarray.mat.precharger.readLatency) / 8;
-	}
+	double readBandwidth = getReadBandwidth();
 	//outFile << "DEBUGGING: bank blockSize - " << bank->blockSize << endl;
 	//outFile << "DEBUGGING: mat readLatency - " << TO_SECOND(bank->subarray.mat.readLatency) << ", decoder readLatency - " << TO_SECOND(bank->subarray.mat.rowDecoder.readLatency) << ", precharger latency - " << TO_SECOND(bank->subarray.mat.precharger.readLatency) << endl;
 	outFile << string(indent, ' ') << " - Read Bandwidth  = " << TO_BPS(readBandwidth) << endl;
-	double writeBandwidth = (double)bank->blockSize /
-			(bank->subarray.mat.writeLatency) / 8;
+	double writeBandwidth = getWriteBandwidth();
 	outFile << string(indent, ' ') << " - Write Bandwidth = " << TO_BPS(writeBandwidth) << endl;
 
 	outFile << string(indent, ' ') << "Power:" << endl;
@@ -1273,7 +1302,7 @@ void Result::printToFile(int indent, const string &FileName) {
 }
 
 void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
-	if (bank->memoryType != data || tagResult.bank->memoryType != tag) {
+	if (bank->memoryType != MemoryType::data || tagResult.bank->memoryType != MemoryType::tag) {
 		cout << "This is not a valid cache configuration." << endl;
 		return;
 	} else {
@@ -1453,57 +1482,54 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
         return;
     }
 
-    if (bank->memoryType != data) {
+    if (bank->memoryType != MemoryType::data) {
         outFile << "This is not a valid cache configuration." << endl;
         outFile.close();
         return;
     } else {
-        double cacheHitLatency, cacheMissLatency, cacheWriteLatency;
-        double cacheHitDynamicEnergy, cacheMissDynamicEnergy, cacheWriteDynamicEnergy;
-        double cacheLeakage;
-        double cacheArea;
+	    double cacheHitLatency = 0;
+	    double cacheMissLatency = 0;
+	    double cacheWriteLatency = 0;
+	    double cacheHitDynamicEnergy = 0;
+	    double cacheMissDynamicEnergy = 0;
+	    double cacheWriteDynamicEnergy = 0;
+	    double cacheLeakage = 0;
+	    double cacheArea = 0;
 
-        if (cacheAccessMode == normal_access_mode) {
-            // Calculate latencies
-            // cacheMissLatency = tagResult.bank->readLatency;  // only the tag access latency
-            cacheHitLatency =
-                bank->subarray.readLatency; // access tag and activate data row in parallel
-            cacheHitLatency += bank->subarray.mat.columnDecoderLatency;  // add column decoder latency after hit
-            cacheHitLatency += bank->readLatency - bank->subarray.readLatency; // H-tree in and out latency
-            cacheWriteLatency = bank->writeLatency; // Data and tag are written in parallel
+	    if (cacheAccessMode == normal_access_mode) {
+	        // Calculate latencies
+	        cacheHitLatency = bank->subarray.readLatency;
+	        cacheHitLatency += bank->subarray.mat.columnDecoderLatency;  // add column decoder latency after hit
+	        cacheHitLatency += bank->readLatency - bank->subarray.readLatency; // H-tree in and out latency
+	        cacheWriteLatency = bank->writeLatency;
 
-            // Calculate power
-            //cacheMissDynamicEnergy = tagResult.bank->readDynamicEnergy; // no subarrayter what tag is always accessed
-            cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
-            cacheHitDynamicEnergy = bank->readDynamicEnergy;
-            cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
-        } else if (cacheAccessMode == fast_access_mode) {
-            // Calculate latencies
-            // cacheMissLatency = tagResult.bank->readLatency;
-            cacheHitLatency = bank->readLatency;
-            cacheWriteLatency = bank->writeLatency;
+	        // Calculate power
+	        cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
+	        cacheHitDynamicEnergy = bank->readDynamicEnergy;
+	        cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
+	    } else if (cacheAccessMode == fast_access_mode) {
+	        // Calculate latencies
+	        cacheHitLatency = bank->readLatency;
+	        cacheWriteLatency = bank->writeLatency;
 
-            // Calculate power
-            // cacheMissDynamicEnergy = tagResult.bank->readDynamicEnergy; // no subarrayter what tag is always accessed
-            cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
-            cacheHitDynamicEnergy = bank->readDynamicEnergy;
-            cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
-        } else { // sequential access
-            // Calculate latencies
-            // cacheMissLatency = tagResult.bank->readLatency;
-            cacheHitLatency = bank->readLatency;
-            cacheWriteLatency =bank->writeLatency;
+	        // Calculate power
+	        cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
+	        cacheHitDynamicEnergy = bank->readDynamicEnergy;
+	        cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
+	    } else { // sequential access
+	        // Calculate latencies
+	        cacheHitLatency = bank->readLatency;
+	        cacheWriteLatency = bank->writeLatency;
 
-            // Calculate power
-            //cacheMissDynamicEnergy = tagResult.bank->readDynamicEnergy; // no subarrayter what tag is always accessed
-            cacheHitDynamicEnergy = bank->readDynamicEnergy;
-            cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
-        }
+	        // Calculate power
+	        cacheHitDynamicEnergy = bank->readDynamicEnergy;
+	        cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
+	    }
 
-        // Calculate leakage
-        // cacheLeakage = tagResult.bank->leakage + bank->leakage;
-        // Calculate area
-        cacheArea = bank->area;  // Just add them
+	    // Calculate leakage
+	    cacheLeakage = bank->leakage;
+	    // Calculate area
+	    cacheArea = bank->area;
 
         // Now write to the file instead of the console
         outFile << endl
@@ -1527,8 +1553,6 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
         outFile << " - Total Area = " << cacheArea * 1e6 << "mm^2" << endl;
         outFile << " |--- Data Array Area = " << bank->height * 1e6 << "um x "
                 << bank->width * 1e6 << "um = " << bank->area * 1e6 << "mm^2" << endl;
-        //outFile << " |--- Tag Array Area  = " << tagResult.bank->height * 1e6 << "um x "
-        //        << tagResult.bank->width * 1e6 << "um = " << tagResult.bank->area * 1e6 << "mm^2" << endl;
 
         // Timing
         outFile << "Timing:" << endl;
@@ -1546,14 +1570,14 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
 			outFile << " - Cache Data Mat Write Cycles = " << ceil(bank->subarray.mat.writeLatency * inputParameter->clockFreq) << " cycles" << endl;
 		}
         if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
-            outFile << " - Cache Refresh Latency = "
-                    << bank->refreshLatency * 1e6
-                    << "us per bank" << endl;
-            outFile << " - Cache Availability = "
-                    << ((cell->retentionTime -
-                         bank->refreshLatency) /
-                        cell->retentionTime) *
-                           100.0
+	        outFile << " - Cache Refresh Latency = "
+	                << bank->refreshLatency * 1e6
+	                << "us per bank" << endl;
+	        outFile << " - Cache Availability = "
+	                << ((cell->retentionTime -
+	                     bank->refreshLatency) /
+	                    cell->retentionTime) *
+	                       100.0
                     << "%" << endl;
         }
 
@@ -1565,15 +1589,13 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
                 << "nJ per access" << endl;
         outFile << " - Cache Write Dynamic Energy = " << cacheWriteDynamicEnergy * 1e9
                 << "nJ per access" << endl;
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
-            outFile << " - Cache Refresh Dynamic Energy = "
-                    << (bank->refreshDynamicEnergy) * 1e9
-                    << "nJ per bank" << endl;
-        }
-        outFile << " - Cache Total Leakage Power  = " << cacheLeakage * 1e3 << "mW" << endl;
-        outFile << " |--- Cache Data Array Leakage Power = " << bank->leakage * 1e3 << "mW" << endl;
-        //outFile << " |--- Cache Tag Array Leakage Power  = "
-        //        << tagResult.bank->leakage * 1e3 << "mW" << endl;
+	    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+	        outFile << " - Cache Refresh Dynamic Energy = "
+	                << (bank->refreshDynamicEnergy) * 1e9
+	                << "nJ per bank" << endl;
+	    }
+	    outFile << " - Cache Total Leakage Power  = " << cacheLeakage * 1e3 << "mW" << endl;
+	    outFile << " |--- Cache Data Array Leakage Power = " << bank->leakage * 1e3 << "mW" << endl;
         if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
             outFile << " - Cache Refresh Power = "
                     << TO_WATT(bank->refreshDynamicEnergy / (cell->retentionTime))
@@ -1758,7 +1780,7 @@ void Result::printToCsvFile(ofstream &outputFile) {
 }
 
 void Result::printAsCacheToCsvFile(Result &tagResult, CacheAccessMode cacheAccessMode, ofstream &outputFile) {
-	if (bank->memoryType != data || tagResult.bank->memoryType != tag) {
+	if (bank->memoryType != MemoryType::data || tagResult.bank->memoryType != MemoryType::tag) {
 		cout << "This is not a valid cache configuration." << endl;
 		return;
 	} else {

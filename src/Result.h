@@ -39,6 +39,8 @@ public:
 	void printToCsvFile(ofstream &outputFile);
 	void printAsCacheToCsvFile(Result &tagBank, CacheAccessMode cacheAccessMode, ofstream &outputFile);
 	bool compareAndUpdate(Result &newResult);
+	double getReadBandwidth() const;
+	double getWriteBandwidth() const;
     string printOptimizationTarget();
 
 	OptimizationTarget optimizationTarget;	/* Exploration should not be assigned here */
@@ -53,6 +55,8 @@ public:
 	double limitWriteDynamicEnergy;		/* The maximum allowable write dynamic energy, Unit: J */
 	double limitReadEdp;				/* The maximum allowable read EDP, Unit: s-J */
 	double limitWriteEdp;				/* The maximum allowable write EDP, Unit: s-J */
+	double limitReadBandwidth;			/* The minimum allowable read bandwidth, Unit: B/s */
+	double limitWriteBandwidth;			/* The minimum allowable write bandwidth, Unit: B/s */
 	double limitArea;					/* The maximum allowable area, Unit: m^2 */
 	double limitLeakage;				/* The maximum allowable leakage power, Unit: W */
     MemCell *cellTech;
