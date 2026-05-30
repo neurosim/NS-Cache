@@ -541,9 +541,8 @@ void CalculateGateCapacitance(
 		if (capInput)
 			*(capInput) = CalculateGateCap(widthNMOS, tech) + CalculateGateCap(widthPMOS, tech);
 	} else {
-		// NSCACHE_UNUSED_KEEP: retained for future special-layout capacitance handling.
-		// int speciallayout = 0;
-    // if (heightTransistorRegion != tech.featureSize *MAX_TRANSISTOR_HEIGHT) speciallayout = 1;
+		int speciallayout = 0;
+		if (heightTransistorRegion != tech.featureSize * MAX_TRANSISTOR_HEIGHT) speciallayout = 1;
 
 
 	if (capInput){
@@ -608,8 +607,8 @@ void CalculateGateCapacitance(
         // int NumPSheet;
         // int NumNSheet;
         // int maxNumSheet;
-        int maxNumPSheet; 
-        int maxNumNSheet; 
+        int maxNumPSheet = 0;
+        int maxNumNSheet = 0;
 
 		if (tech.featureSize >= 22 * 1e-9) { // Bulk
 			if (ratio == 0) {	/* no PMOS */
@@ -695,36 +694,63 @@ void CalculateGateCapacitance(
 				CPP_advanced = CPP_1nm;
 			} 
 
-		// 1.4 update: setting the maximum number of fins
- 			if (tech.featureSize == 14 * 1e-9) { // adding more cases 
-				maxNumPFin = maxNumNFin = tech.max_fin_num; // changed from 3 to 4
-				modified_POLY_WIDTH_FINFET= POLY_WIDTH_14nm;
-				CPP_advanced = CPP_14nm;
-			} else if (tech.featureSize == 10 * 1e-9) {
-				maxNumPFin = maxNumNFin = tech.max_fin_num;
-				modified_POLY_WIDTH_FINFET= POLY_WIDTH_10nm;
-				CPP_advanced = CPP_10nm;
-			} else if (tech.featureSize == 7 * 1e-9) {
-				maxNumPFin = maxNumNFin = tech.max_fin_num;
-				modified_POLY_WIDTH_FINFET= POLY_WIDTH_7nm;
-				CPP_advanced = CPP_7nm;
-			} else if (tech.featureSize == 5 * 1e-9) {
-				maxNumPFin = maxNumNFin = tech.max_fin_num;
-				modified_POLY_WIDTH_FINFET= POLY_WIDTH_5nm;
-				CPP_advanced = CPP_5nm;
-			} else if (tech.featureSize == 3 * 1e-9) {
-				maxNumPFin = maxNumNFin = tech.max_fin_num;
-				modified_POLY_WIDTH_FINFET= POLY_WIDTH_3nm;
-				CPP_advanced = CPP_3nm;
-			} else if (tech.featureSize == 2 * 1e-9) {
-				maxNumPSheet= maxNumNSheet = tech.max_fin_per_GAA;
-				modified_POLY_WIDTH_FINFET= POLY_WIDTH_2nm;
-				CPP_advanced = CPP_2nm;
-			} else if (tech.featureSize == 1 * 1e-9) {
-				maxNumPSheet= maxNumNSheet = tech.max_fin_per_GAA;
-				modified_POLY_WIDTH_FINFET= POLY_WIDTH_1nm;
-				CPP_advanced = CPP_1nm;
-			} 
+			// A custom-height layout can fit a different number of fins or sheets
+			// before folding. Keep the calibrated standard-cell values unchanged.
+			if (!speciallayout) {
+				if (tech.featureSize > 2 * 1e-9) {
+					maxNumPFin = maxNumNFin = tech.max_fin_num;
+				} else {
+					maxNumPSheet = maxNumNSheet = tech.max_fin_per_GAA;
+				}
+			} else {
+				double modified_MIN_GAP_BET_P_AND_N_DIFFS = 0;
+				double outer_height_region_advanced = 0;
+				bool hasNodeSpecificLayout = true;
+
+				if (tech.featureSize == 14 * 1e-9) {
+					modified_MIN_GAP_BET_P_AND_N_DIFFS = MIN_GAP_BET_P_AND_N_DIFFS_14nm;
+					outer_height_region_advanced = OUTER_HEIGHT_REGION_14nm;
+				} else if (tech.featureSize == 10 * 1e-9) {
+					modified_MIN_GAP_BET_P_AND_N_DIFFS = MIN_GAP_BET_P_AND_N_DIFFS_10nm;
+					outer_height_region_advanced = OUTER_HEIGHT_REGION_10nm;
+				} else if (tech.featureSize == 7 * 1e-9) {
+					modified_MIN_GAP_BET_P_AND_N_DIFFS = MIN_GAP_BET_P_AND_N_DIFFS_7nm;
+					outer_height_region_advanced = OUTER_HEIGHT_REGION_7nm;
+				} else if (tech.featureSize == 5 * 1e-9) {
+					modified_MIN_GAP_BET_P_AND_N_DIFFS = MIN_GAP_BET_P_AND_N_DIFFS_5nm;
+					outer_height_region_advanced = OUTER_HEIGHT_REGION_5nm;
+				} else if (tech.featureSize == 3 * 1e-9) {
+					modified_MIN_GAP_BET_P_AND_N_DIFFS = MIN_GAP_BET_P_AND_N_DIFFS_3nm;
+					outer_height_region_advanced = OUTER_HEIGHT_REGION_3nm;
+				} else if (tech.featureSize == 2 * 1e-9) {
+					modified_MIN_GAP_BET_P_AND_N_DIFFS = MIN_GAP_BET_P_AND_N_DIFFS_2nm;
+					outer_height_region_advanced = OUTER_HEIGHT_REGION_2nm;
+				} else if (tech.featureSize == 1 * 1e-9) {
+					modified_MIN_GAP_BET_P_AND_N_DIFFS = MIN_GAP_BET_P_AND_N_DIFFS_1nm;
+					outer_height_region_advanced = OUTER_HEIGHT_REGION_1nm;
+				} else {
+					hasNodeSpecificLayout = false;
+				}
+
+				if (hasNodeSpecificLayout) {
+					int maxNumDevice = (int)floor(
+							((heightTransistorRegion
+							- modified_MIN_GAP_BET_P_AND_N_DIFFS * tech.featureSize
+							- outer_height_region_advanced * tech.featureSize)
+							+ tech.PitchFin)
+							/ 2.0 / (tech.widthFin + tech.PitchFin));
+					maxNumDevice = MAX(maxNumDevice, 1);
+					if (tech.featureSize > 2 * 1e-9) {
+						maxNumPFin = maxNumNFin = maxNumDevice;
+					} else {
+						maxNumPSheet = maxNumNSheet = maxNumDevice;
+					}
+				} else if (tech.featureSize > 2 * 1e-9) {
+					maxNumPFin = maxNumNFin = tech.max_fin_num;
+				} else {
+					maxNumPSheet = maxNumNSheet = tech.max_fin_per_GAA;
+				}
+			}
 
 		// 1.4 update: temp_P, temp_N, temp_P_NS, temp_N_NS
 		// 1.4 update: temp_N_ratio, temp_P_ratio, temp_N_NS_ratio, temp_P_NS_ratio
@@ -861,13 +887,13 @@ void CalculateGateCapacitance(
 
 				if (NumNSheet > 0) {
 					if (NumNSheet <= maxNumNSheet) { /* No folding */
-						unitWidthDrainN = tech.featureSize * MIN_GAP_BET_GATE_POLY_FINFET;
+						unitWidthDrainN = tech.featureSize * modified_MIN_GAP_BET_GATE_POLY_FINFET;
 						unitWidthSourceN = unitWidthDrainN;
 						heightDrainN =  NumNSheet * tech.widthFin;
 					} else {    /* Folding */
 						numFoldedNMOS = (int)(ceil(NumNSheet / maxNumNSheet));
-						unitWidthDrainN = (int)ceil((double)(numFoldedNMOS+1)/2) * tech.featureSize * MIN_GAP_BET_GATE_POLY_FINFET;
-						unitWidthSourceN = (int)floor((double)(numFoldedNMOS+1)/2) * tech.featureSize * MIN_GAP_BET_GATE_POLY_FINFET;
+						unitWidthDrainN = (int)ceil((double)(numFoldedNMOS+1)/2) * tech.featureSize * modified_MIN_GAP_BET_GATE_POLY_FINFET;
+						unitWidthSourceN = (int)floor((double)(numFoldedNMOS+1)/2) * tech.featureSize * modified_MIN_GAP_BET_GATE_POLY_FINFET;
 						heightDrainN = maxNumNSheet * tech.widthFin; // modified from heightDrainN = (maxNumNFin-1) * tech.PitchFin + 2 * tech.widthFin/2;
 					}
 				} else {
