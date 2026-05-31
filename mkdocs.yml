@@ -1,0 +1,10 @@
+site_name: NS-Cache
+site_description: Early exploration of cache memories in advanced technology nodes
+repo_url: https://github.com/neurosim/NS-Cache
+repo_name: neurosim/NS-Cache
+
+theme:
+  name: readthedocs
+
+nav:
+  - Home: index.md
