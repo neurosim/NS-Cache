@@ -43,9 +43,9 @@ The supplied eDRAM and gcDRAM examples are executed from the repository root aft
 ./nsc config/New_Configs/AOS_gcDRAM_demo.cfg
 ```
 
-The eDRAM example uses a 100 nm-wide, 30 nm-long access transistor with compact mobility, nonzero contact resistance, and −0.75 V/1.25 V hold/on biases. Its parameter set reconstructs a profile from rounded output of the legacy experimental reference executable. The original cell file and the provenance of unprinted calibration parameters were unavailable. Unrecovered coefficients therefore retain model defaults, and the storage capacitance is a placeholder. The resulting example demonstrates the recovered legacy profile, with scientific validation still dependent on the original calibration data.
+The eDRAM example uses a 100 nm-wide, 30 nm-long access transistor with compact mobility, nonzero contact resistance, and −0.75 V/1.25 V hold/on biases.
 
-The gcDRAM example uses a synthetic parameter set: 200 nm read width, 100 nm write width, 50 nm channel lengths, 20/25 cm²/Vs constant mobilities, and 0/Vdd biases. These dimensions and coefficients illustrate the independent read and write paths. Both examples fix the mat dimensions and disable the bank aspect-ratio constraint for reproducibility.
+The gcDRAM example uses a synthetic parameter set: 200 nm read width, 100 nm write width, 50 nm channel lengths, 20/25 cm²/Vs constant mobilities, and 0/Vdd biases. These dimensions and coefficients illustrate the independent read and write paths.
 
 ## Retention and leakage assumptions
 
