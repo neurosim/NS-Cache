@@ -1,4 +1,0 @@
-This file list important updates made to NeuroSim (NS)-Cache.
-
-October 2025
-* Version 1 of NS-Cache code released
