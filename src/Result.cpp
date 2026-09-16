@@ -22,10 +22,160 @@
 #include "formula.h"
 #include "macros.h"
 
+#include <cmath>
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 
 using namespace std;
+
+namespace {
+
+bool IsRefreshMemory(MemCellType type) {
+	return type == DRAM || type == eDRAM || type == gcDRAM;
+}
+
+const char *M3DDominantTierName(M3DDominantTier tier) {
+	switch (tier) {
+	case M3DDominantTier::logic:
+		return "logic";
+	case M3DDominantTier::memory:
+		return "memory";
+	default:
+		return "none";
+	}
+}
+
+void PrintOperatingPoint(ostream &output, int indent, const char *name,
+		const AOSDeviceOperatingPoint &point) {
+	ios::fmtflags flags = output.flags();
+	streamsize precision = output.precision();
+	output << scientific << setprecision(6);
+	output << string(indent, ' ') << " - " << name << " AOS operating point: Ion="
+			<< point.Ion << "A, Ioff=" << point.Ioff << "A, Ron=" << point.Ron
+			<< "ohm, Roff=" << point.Roff << "ohm, Cgate=" << point.Cgate
+			<< "F, Cdrain=" << point.Cdrain << "F" << endl;
+	output.flags(flags);
+	output.precision(precision);
+}
+
+void PrintIntegratedModelLabels(ostream &output, int indent, const Mat &mat,
+		const MemCell &memoryCell) {
+	if (memoryCell.memCellType == DRAM || memoryCell.memCellType == eDRAM)
+		output << string(indent, ' ') << "DRAM timing model: restore-aware v1" << endl;
+	if (memoryCell.memCellType == gcDRAM)
+		output << string(indent, ' ') << "gcDRAM electrical/energy model: split-path v1" << endl;
+	if (memoryCell.oxideTransistor) {
+		output << string(indent, ' ') << "AOS compact-model v1" << endl;
+		if (memoryCell.memCellType == eDRAM)
+			PrintOperatingPoint(output, indent, "Access", mat.aosAccessOperatingPoint);
+		else if (memoryCell.memCellType == gcDRAM) {
+			PrintOperatingPoint(output, indent, "Read", mat.aosReadOperatingPoint);
+			PrintOperatingPoint(output, indent, "Write", mat.aosWriteOperatingPoint);
+		}
+	}
+}
+
+void PrintM3DDetails(ostream &output, int indent, const Mat &mat) {
+	output << string(indent, ' ') << " |--- M3D footprint/MIV model = corrected v1" << endl;
+	output << string(indent, ' ') << " |--- Mat Memory Tiers = " << mat.stackedMemTiers << endl;
+	output << string(indent, ' ') << " |--- MIVs Per Tier = " << mat.m3d.mivsPerTier << endl;
+	output << string(indent, ' ') << " |--- Total MIV Count = " << mat.m3d.totalMivCount << endl;
+	output << string(indent, ' ') << " |--- Total MIV Area = " << TO_SQM(mat.m3d.totalMivArea) << endl;
+	output << string(indent, ' ') << " |--- Base Peripheral Logic Area = "
+			<< TO_SQM(mat.m3d.peripheralLogicArea) << endl;
+	output << string(indent, ' ') << " |--- Final Logic-Layer Area = "
+			<< TO_SQM(mat.m3d.finalLogicLayerArea) << endl;
+	output << string(indent, ' ') << " |--- Per-Tier Memory Area = "
+			<< TO_SQM(mat.m3d.perTierMemoryArea) << endl;
+	output << string(indent, ' ') << " |--- Projected MAT Area = "
+			<< TO_SQM(mat.m3d.projectedArea) << endl;
+	output << string(indent, ' ') << " |--- Dominant Tier = "
+			<< M3DDominantTierName(mat.m3d.dominantTier) << endl;
+}
+
+void PrintIntegratedTimingDetails(ostream &output, int indent, const Mat &mat,
+		MemCellType type) {
+	if (type == DRAM || type == eDRAM) {
+		output << string(indent, ' ') << "       |--- DRAM Access (Time-to-Data) = "
+				<< TO_SECOND(mat.dramTiming.accessLatency) << endl;
+		output << string(indent, ' ') << "       |--- DRAM Restore Delay = "
+				<< TO_SECOND(mat.dramTiming.restoreDelay) << endl;
+		output << string(indent, ' ') << "       |--- DRAM Full Read Cycle = "
+				<< TO_SECOND(mat.dramTiming.readCycleLatency) << endl;
+		output << string(indent, ' ') << "       |--- DRAM Write-Bitline Settling = "
+				<< TO_SECOND(mat.dramTiming.writeBitlineDelay) << endl;
+	} else if (type == gcDRAM) {
+		output << string(indent, ' ') << "       |--- gcDRAM Read-Bitline Delay = "
+				<< TO_SECOND(mat.readBitlineDelay) << endl;
+		output << string(indent, ' ') << "       |--- gcDRAM Write-Bitline Delay = "
+				<< TO_SECOND(mat.writeBitlineDelay) << endl;
+	}
+}
+
+void PrintGcDRAMReadEnergy(ostream &output, int indent, const Mat &mat,
+		MemCellType type) {
+	if (type == gcDRAM)
+		output << string(indent, ' ') << "       |--- gcDRAM Read-Bitline/Access Energy = "
+				<< TO_JOULE(mat.gcDramPower.readBitlineAccessEnergy) << endl;
+}
+
+void PrintGcDRAMWriteEnergy(ostream &output, int indent, const Mat &mat,
+		MemCellType type) {
+	if (type == gcDRAM) {
+		output << string(indent, ' ') << "       |--- gcDRAM Write-Bitline/Access Energy = "
+				<< TO_JOULE(mat.gcDramPower.writeBitlineAccessEnergy) << endl;
+		output << string(indent, ' ') << "       |--- gcDRAM Write-Charge-Driver Energy = "
+				<< TO_JOULE(mat.gcDramPower.writeChargeDriverEnergy) << endl;
+	}
+}
+
+void PrintGcDRAMRefreshEnergy(ostream &output, int indent, const Mat &mat,
+		MemCellType type) {
+	if (type != gcDRAM)
+		return;
+
+	const double perRowEnergy = mat.gcDramPower.readBitlineAccessEnergy
+			+ mat.gcDramPower.writeBitlineAccessEnergy
+			+ mat.gcRowDecoder.readDynamicEnergy + mat.rowDecoder.readDynamicEnergy
+			+ mat.precharger.readDynamicEnergy + mat.gcDramPower.writeChargeDriverEnergy
+			+ mat.senseAmp.readDynamicEnergy;
+	const long long rowMultiplier = mat.numRow + 2;
+
+	/* gcDRAM refreshDynamicEnergy is an aggregate MAT sweep.  Expose every
+	 * per-row term and the retained (numRow + 2) multiplier so the printed
+	 * decomposition can be reconstructed without mixing units/scopes. */
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Read-Bitline/Access Energy Per Row = "
+			<< TO_JOULE(mat.gcDramPower.readBitlineAccessEnergy) << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Write-Bitline/Access Energy Per Row = "
+			<< TO_JOULE(mat.gcDramPower.writeBitlineAccessEnergy) << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Read-Row-Decoder Energy Per Row = "
+			<< TO_JOULE(mat.gcRowDecoder.readDynamicEnergy) << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Write-Row-Decoder Energy Per Row = "
+			<< TO_JOULE(mat.rowDecoder.readDynamicEnergy) << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Read-Precharger Energy Per Row = "
+			<< TO_JOULE(mat.precharger.readDynamicEnergy) << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Write-Charger Energy Per Row = "
+			<< TO_JOULE(mat.gcDramPower.writeChargeDriverEnergy) << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Sense-Amp Energy Per Row = "
+			<< TO_JOULE(mat.senseAmp.readDynamicEnergy) << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Energy Per-Row Sum = "
+			<< TO_JOULE(perRowEnergy) << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Row Multiplier = "
+			<< rowMultiplier << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Reconstructed Mat Refresh Energy = "
+			<< TO_JOULE(perRowEnergy * rowMultiplier) << endl;
+}
+
+void PrintAOSLeakageUpperBound(ostream &output, int indent, const Mat &mat) {
+	if (mat.aosLeakageUpperBound > 0) {
+		output << string(indent, ' ') << " -- AOS full-Vds leakage upper bound = "
+				<< TO_WATT(mat.aosLeakageUpperBound)
+				<< " (uncalibrated conservative bound)" << endl;
+	}
+}
+
+} // namespace
 
 Result::Result() {
 	// TODO Auto-generated constructor stub
@@ -61,7 +211,8 @@ Result::Result() {
 	/* Default read latency optimization */
 	optimizationTarget = read_latency_optimized;
 
-    cellTech = NULL;
+	/* Capture the explored cell so saved results do not depend on the mutable global. */
+	cellTech = cell;
 }
 
 Result::~Result() {
@@ -86,27 +237,33 @@ void Result::reset() {
 }
 
 double Result::getReadBandwidth() const {
-	if (bank->readLatency >= invalid_value / 10 || bank->blockSize <= 0)
+	if (!cellTech || !std::isfinite(bank->readLatency)
+			|| bank->readLatency >= invalid_value / 10 || bank->blockSize <= 0)
 		return 0;
 
 	double readCycleLatency = bank->subarray.mat.readLatency - bank->subarray.mat.rowDecoder.readLatency
 			+ bank->subarray.mat.precharger.readLatency;
-	if (cell && cell->memCellType == gcDRAM) {
+	if (cellTech->memCellType == DRAM || cellTech->memCellType == eDRAM) {
+		readCycleLatency = bank->subarray.mat.dramTiming.readCycleLatency;
+	} else if (cellTech->memCellType == gcDRAM) {
 		readCycleLatency = bank->subarray.mat.readLatency - bank->subarray.mat.gcRowDecoder.readLatency
 				+ bank->subarray.mat.precharger.readLatency;
 	}
-	if (readCycleLatency <= 0 || readCycleLatency >= invalid_value / 10)
+	if (!std::isfinite(readCycleLatency)
+			|| readCycleLatency <= 0 || readCycleLatency >= invalid_value / 10)
 		return 0;
 
 	return (double)bank->blockSize / readCycleLatency / 8;
 }
 
 double Result::getWriteBandwidth() const {
-	if (bank->writeLatency >= invalid_value / 10 || bank->blockSize <= 0)
+	if (!cellTech || !std::isfinite(bank->writeLatency)
+			|| bank->writeLatency >= invalid_value / 10 || bank->blockSize <= 0)
 		return 0;
 
 	double writeCycleLatency = bank->subarray.mat.writeLatency;
-	if (writeCycleLatency <= 0 || writeCycleLatency >= invalid_value / 10)
+	if (!std::isfinite(writeCycleLatency)
+			|| writeCycleLatency <= 0 || writeCycleLatency >= invalid_value / 10)
 		return 0;
 
 	return (double)bank->blockSize / writeCycleLatency / 8;
@@ -171,6 +328,7 @@ bool Result::compareAndUpdate(Result &newResult) {
 			*bank = *(newResult.bank);
 			*localWire = *(newResult.localWire);
 			*globalWire = *(newResult.globalWire);
+			cellTech = newResult.cellTech;
 		}
 	}
 
@@ -220,6 +378,12 @@ string Result::printOptimizationTarget() {
 }
 
 void Result::print(int indent) {
+	/* Deliberately shadow the process-wide exploration pointer with this snapshot's cell. */
+	MemCell *const cell = cellTech;
+	if (!cell) {
+		cerr << "Result has no associated memory cell." << endl;
+		return;
+	}
 	cout << string(indent, ' ') << endl;
     cout << string(indent, ' ') << "=============" << endl;
     cout << string(indent, ' ') << "   SUMMARY   " << endl;
@@ -243,6 +407,7 @@ void Result::print(int indent) {
 	cout << string(indent, ' ') << " - Row Activation   : " << bank->numActiveMatPerColumn << " / " << bank->numRowMat << endl;
 	cout << string(indent, ' ') << " - Column Activation: " << bank->numActiveMatPerRow << " / " << bank->numColumnMat << endl;
 	cout << string(indent, ' ') << " - Mat Size    : " << bank->subarray.mat.numRow << " Rows x " << bank->subarray.mat.numColumn << " Columns" << endl;
+	PrintIntegratedModelLabels(cout, indent, bank->subarray.mat, *cell);
 	cout << string(indent, ' ') << "Mux Level:" << endl;
 	cout << string(indent, ' ') << " - Senseamp Mux      : " << bank->muxSenseAmp << endl;
 	cout << string(indent, ' ') << " - Output Level-1 Mux: " << bank->muxOutputLev1 << endl;
@@ -397,7 +562,8 @@ void Result::print(int indent) {
 	/* Mat Area BreakDown */
 	if (inputParameter->viewMatStats){
 		cout << string(indent, ' ') << " |--- Mat rowDecoder Area = " << TO_SQM(2*bank->subarray.mat.rowDecoder.area) << endl;
-		cout << string(indent, ' ') << " |--- Mat WWL Decoder Area = " << TO_SQM(bank->subarray.mat.gcRowDecoder.area) << endl;
+		if (cell->memCellType == gcDRAM)
+			cout << string(indent, ' ') << " |--- Mat gcDRAM Read Row Decoder Area = " << TO_SQM(bank->subarray.mat.gcRowDecoder.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat bitlineMuxDecoder Area = " << TO_SQM(2*bank->subarray.mat.bitlineMuxDecoder.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat bitlineMux Area = " << TO_SQM(bank->subarray.mat.bitlineMux.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat senseAmpMuxLev1 Area = " << TO_SQM(bank->subarray.mat.senseAmpMuxLev1.area) << endl;
@@ -405,7 +571,8 @@ void Result::print(int indent) {
 		cout << string(indent, ' ') << " |--- Mat senseAmpMuxLev1Decoder Area = " << TO_SQM(bank->subarray.mat.senseAmpMuxLev1Decoder.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat senseAmpMuxLev2Decoder Area = " << TO_SQM(bank->subarray.mat.senseAmpMuxLev2Decoder.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat precharger Area = " << TO_SQM(2*bank->subarray.mat.precharger.area) << endl;
-		cout << string(indent, ' ') << " |--- Mat writeDriver Area = " << TO_SQM(2*bank->subarray.mat.writecharger.area) << endl;
+		if (cell->memCellType == gcDRAM)
+			cout << string(indent, ' ') << " |--- Mat gcDRAM Write Charger Area = " << TO_SQM(bank->subarray.mat.writecharger.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat senseAmp Area = " << TO_SQM(bank->subarray.mat.senseAmp.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat MIV Area = " << TO_SQM(bank->subarray.mat.tsvArray.area) << endl;
 	}
@@ -413,7 +580,7 @@ void Result::print(int indent) {
 	/*Mat Area BreakDown End*/
 	
 	if (inputParameter->monolithic3DMat){
-		cout << string(indent, ' ') << " |--- Mat Memory Tiers = " << bank->subarray.mat.stackedMemTiers << endl;
+		PrintM3DDetails(cout, indent, bank->subarray.mat);
 	}
     if (bank->stackedDieCount > 1 && bank->partitionGranularity == 0) {
         cout << string(indent, ' ') << " |--- TSV Area      = " << TO_SQM(bank->tsvArray.area) << endl;
@@ -448,6 +615,7 @@ void Result::print(int indent) {
 	cout << string(indent, ' ') << " |--- SubArray Latency    = " << TO_SECOND(bank->subarray.readLatency) << endl;
 	cout << string(indent, ' ') << "    |--- Predecoder Latency = " << TO_SECOND(bank->subarray.predecoderLatency) << endl;
 	cout << string(indent, ' ') << "    |--- Mat Latency   = " << TO_SECOND(bank->subarray.mat.readLatency) << endl;
+	PrintIntegratedTimingDetails(cout, indent, bank->subarray.mat, cell->memCellType);
 	if(cell->memCellType != gcDRAM) { 
 		cout << string(indent, ' ') << "       |--- Row Decoder Latency = " << TO_SECOND(bank->subarray.mat.rowDecoder.readLatency) << endl;
 		cout << string(indent, ' ') << "       |--- Bitline Latency     = " << TO_SECOND(bank->subarray.mat.bitlineDelay) << endl;
@@ -542,8 +710,8 @@ void Result::print(int indent) {
 		cout << string(indent, ' ') << "       |--- Row Decoder Latency = " << TO_SECOND(bank->subarray.mat.rowDecoder.writeLatency) << endl;
 		cout << string(indent, ' ') << "       |--- Charge Latency      = " << TO_SECOND(bank->subarray.mat.chargeLatency) << endl;
 		if (cell->memCellType == gcDRAM) cout << string(indent, ' ') << "       |--- Write Bitline Latency     = " << TO_SECOND(bank->subarray.mat.writeBitlineDelay) << endl;
-	}
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+		}
+	    if (IsRefreshMemory(cell->memCellType)) {
         cout << string(indent, ' ') << " - Refresh Latency = " << TO_SECOND(bank->refreshLatency) << endl;
         if ((bank->stackedDieCount > 1 && bank->partitionGranularity == 0)) {
             cout << string(indent, ' ') << " |--- TSV Latency    = " << TO_SECOND(bank->tsvArray.writeLatency * (bank->stackedDieCount-1)) << endl;
@@ -606,6 +774,7 @@ void Result::print(int indent) {
 													+ bank->subarray.mat.senseAmpMuxLev1.readDynamicEnergy
 													+ bank->subarray.mat.senseAmpMuxLev2.readDynamicEnergy) << endl;
 	cout << string(indent, ' ') << "       |--- Precharge Dynamic Energy   = " << TO_JOULE(bank->subarray.mat.precharger.readDynamicEnergy) << endl;
+	PrintGcDRAMReadEnergy(cout, indent, bank->subarray.mat, cell->memCellType);
 
 	if (cell->memCellType == PCRAM || cell->memCellType == FBRAM ||
 			(cell->memCellType == memristor && (cell->accessType == CMOS_access || cell->accessType == BJT_access))) {
@@ -717,7 +886,8 @@ void Result::print(int indent) {
 			cout << string(indent, ' ') << "       |--- Bitline & Cell Write Energy= " << TO_JOULE(bank->subarray.mat.cellResetEnergy) << endl;
 		}
 	}
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+	PrintGcDRAMWriteEnergy(cout, indent, bank->subarray.mat, cell->memCellType);
+    if (IsRefreshMemory(cell->memCellType)) {
         cout << string(indent, ' ') << " - Refresh Dynamic Energy = " << TO_JOULE(bank->refreshDynamicEnergy) << endl;
         if (bank->stackedDieCount > 1 && bank->partitionGranularity == 0) {
             cout << string(indent, ' ') << " |--- TSV Dynamic Energy    = " << TO_JOULE(bank->tsvArray.writeDynamicEnergy * (bank->stackedDieCount-1) * bank->tsvArray.numReadBits) << endl;
@@ -733,14 +903,19 @@ void Result::print(int indent) {
                 TO_JOULE(bank->subarray.refreshDynamicEnergy - bank->subarray.mat.refreshDynamicEnergy
                          * bank->numActiveMatPerRow * bank->numActiveMatPerColumn) << endl;
         cout << string(indent, ' ') << "    |--- Mat Dynamic Energy   = " << TO_JOULE(bank->subarray.mat.refreshDynamicEnergy) << " per active mat" << endl;
-        cout << string(indent, ' ') << "       |--- Row Decoder Dynamic Energy = " << TO_JOULE(bank->subarray.mat.rowDecoder.readDynamicEnergy) << endl;
-        if (inputParameter->internalSensing)
-            cout << string(indent, ' ') << "       |--- Senseamp Dynamic Energy    = " << TO_JOULE(bank->subarray.mat.senseAmp.refreshDynamicEnergy) << endl;
-        cout << string(indent, ' ') << "       |--- Precharge Dynamic Energy   = " << TO_JOULE(bank->subarray.mat.precharger.refreshDynamicEnergy) << endl;
+        if (cell->memCellType == gcDRAM) {
+			PrintGcDRAMRefreshEnergy(cout, indent, bank->subarray.mat, cell->memCellType);
+		} else {
+			cout << string(indent, ' ') << "       |--- Row Decoder Dynamic Energy Per Row = " << TO_JOULE(bank->subarray.mat.rowDecoder.readDynamicEnergy) << endl;
+			if (inputParameter->internalSensing)
+				cout << string(indent, ' ') << "       |--- Senseamp Dynamic Energy Per Row    = " << TO_JOULE(bank->subarray.mat.senseAmp.readDynamicEnergy) << endl;
+			cout << string(indent, ' ') << "       |--- Precharge Dynamic Energy Per Row   = " << TO_JOULE(bank->subarray.mat.precharger.readDynamicEnergy) << endl;
+		}
     }
 
 	cout << string(indent, ' ') << " - Leakage Power = " << TO_WATT(bank->leakage) << endl;
 	cout << string(indent, ' ') << " -- Mat Leakage Power = " << TO_WATT(bank->subarray.mat.leakage) << endl;
+	PrintAOSLeakageUpperBound(cout, indent, bank->subarray.mat);
 	/* Mat Component Leakage Analysis */
 	if (inputParameter->viewMatStats){
 		cout << string(indent, ' ') << " -- Mat Leakage rowDecoder Power = " << TO_WATT(bank->subarray.mat.rowDecoder.leakage) << endl;
@@ -765,18 +940,27 @@ void Result::print(int indent) {
 	} else
 		cout << string(indent, ' ') << " |--- Non-H-Tree Leakage Power = " << TO_WATT(bank->routingLeakage) << endl;
 	cout << string(indent, ' ') << " |--- SubArray Leakage Power        = " << TO_WATT(bank->subarray.leakage) << " per subarray" << endl;
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+    if (IsRefreshMemory(cell->memCellType)) {
         cout << string(indent, ' ') << " - Refresh Power = " << TO_WATT(bank->refreshDynamicEnergy / (cell->retentionTime)) << endl;
     }
 }
 
 void Result::printToFile(int indent, const string &FileName) {
-    // Attempt to open the file
-    std::ofstream outFile(FileName.c_str());
-    if (!outFile.is_open()) {
-        std::cerr << "Error opening file: " << FileName << std::endl;
-        return;
-    }
+	std::ofstream outFile(FileName.c_str());
+	if (!outFile.is_open()) {
+		std::cerr << "Error opening file: " << FileName << std::endl;
+		return;
+	}
+	printToStream(indent, outFile);
+}
+
+void Result::printToStream(int indent, ostream &outFile) {
+	/* Deliberately shadow the process-wide exploration pointer with this snapshot's cell. */
+	MemCell *const cell = cellTech;
+	if (!cell) {
+		cerr << "Result has no associated memory cell." << endl;
+		return;
+	}
 
     	outFile << string(indent, ' ') << endl;
     outFile << string(indent, ' ') << "=============" << endl;
@@ -801,6 +985,7 @@ void Result::printToFile(int indent, const string &FileName) {
 	outFile << string(indent, ' ') << " - Row Activation   : " << bank->numActiveMatPerColumn << " / " << bank->numRowMat << endl;
 	outFile << string(indent, ' ') << " - Column Activation: " << bank->numActiveMatPerRow << " / " << bank->numColumnMat << endl;
 	outFile << string(indent, ' ') << " - Mat Size    : " << bank->subarray.mat.numRow << " Rows x " << bank->subarray.mat.numColumn << " Columns" << endl;
+	PrintIntegratedModelLabels(outFile, indent, bank->subarray.mat, *cell);
 	outFile << string(indent, ' ') << "Mux Level:" << endl;
 	outFile << string(indent, ' ') << " - Senseamp Mux      : " << bank->muxSenseAmp << endl;
 	outFile << string(indent, ' ') << " - Output Level-1 Mux: " << bank->muxOutputLev1 << endl;
@@ -956,7 +1141,8 @@ void Result::printToFile(int indent, const string &FileName) {
 
 	if (inputParameter->viewMatStats){
 		outFile << string(indent, ' ') << " |--- Mat rowDecoder Area = " << TO_SQM(2*bank->subarray.mat.rowDecoder.area) << endl;
-		outFile << string(indent, ' ') << " |--- Mat WWL Decoder Area [Gain-Cell] = " << TO_SQM(bank->subarray.mat.gcRowDecoder.area) << endl;
+		if (cell->memCellType == gcDRAM)
+			outFile << string(indent, ' ') << " |--- Mat gcDRAM Read Row Decoder Area = " << TO_SQM(bank->subarray.mat.gcRowDecoder.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat bitlineMuxDecoder Area = " << TO_SQM(2*bank->subarray.mat.bitlineMuxDecoder.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat bitlineMux Area = " << TO_SQM(bank->subarray.mat.bitlineMux.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat senseAmpMuxLev1 Area = " << TO_SQM(bank->subarray.mat.senseAmpMuxLev1.area) << endl;
@@ -964,7 +1150,8 @@ void Result::printToFile(int indent, const string &FileName) {
 		outFile << string(indent, ' ') << " |--- Mat senseAmpMuxLev1Decoder Area = " << TO_SQM(bank->subarray.mat.senseAmpMuxLev1Decoder.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat senseAmpMuxLev2Decoder Area = " << TO_SQM(bank->subarray.mat.senseAmpMuxLev2Decoder.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat precharger Area = " << TO_SQM(2*bank->subarray.mat.precharger.area) << endl;
-		outFile << string(indent, ' ') << " |--- Mat writeDriver Area = " << TO_SQM(2*bank->subarray.mat.writecharger.area) << endl;
+		if (cell->memCellType == gcDRAM)
+			outFile << string(indent, ' ') << " |--- Mat gcDRAM Write Charger Area = " << TO_SQM(bank->subarray.mat.writecharger.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat senseAmp Area =" << TO_SQM(bank->subarray.mat.senseAmp.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat MIV Area = " << TO_SQM(bank->subarray.mat.tsvArray.area) << endl;
 	}
@@ -972,7 +1159,7 @@ void Result::printToFile(int indent, const string &FileName) {
 	/*Mat Area BreakDown End*/
 	
 	if (inputParameter->monolithic3DMat){
-		outFile << string(indent, ' ') << " |--- Mat Memory Tiers = " << bank->subarray.mat.stackedMemTiers << endl;
+		PrintM3DDetails(outFile, indent, bank->subarray.mat);
 	}
     if (bank->stackedDieCount > 1 && bank->partitionGranularity == 0) {
         outFile << string(indent, ' ') << " |--- TSV Area      = " << TO_SQM(bank->tsvArray.area) << endl;
@@ -1007,6 +1194,7 @@ void Result::printToFile(int indent, const string &FileName) {
 	outFile << string(indent, ' ') << " |--- SubArray Latency    = " << TO_SECOND(bank->subarray.readLatency) << endl;
 	outFile << string(indent, ' ') << "    |--- Predecoder Latency = " << TO_SECOND(bank->subarray.predecoderLatency) << endl;
 	outFile << string(indent, ' ') << "    |--- Mat Latency   = " << TO_SECOND(bank->subarray.mat.readLatency) << endl;
+	PrintIntegratedTimingDetails(outFile, indent, bank->subarray.mat, cell->memCellType);
 	if(cell->memCellType != gcDRAM) { 
 		outFile << string(indent, ' ') << "       |--- Row Decoder Latency = " << TO_SECOND(bank->subarray.mat.rowDecoder.readLatency) << endl;
 		outFile << string(indent, ' ') << "       |--- Bitline Latency     = " << TO_SECOND(bank->subarray.mat.bitlineDelay) << endl;
@@ -1104,7 +1292,7 @@ void Result::printToFile(int indent, const string &FileName) {
 		//if(cell->memCellType == gcDRAM) outFile << string(indent, ' ') << "       |--- Level Shifter Latency = " << TO_SECOND(bank->subarray.mat.write_levelshifter.readLatency) << endl;
 		outFile << string(indent, ' ') << "       |--- Charge Latency      = " << TO_SECOND(bank->subarray.mat.chargeLatency) << endl;
 	}
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+    if (IsRefreshMemory(cell->memCellType)) {
         outFile << string(indent, ' ') << " - Refresh Latency = " << TO_SECOND(bank->refreshLatency) << endl;
         if ((bank->stackedDieCount > 1 && bank->partitionGranularity == 0)) {
             outFile << string(indent, ' ') << " |--- TSV Latency    = " << TO_SECOND(bank->tsvArray.writeLatency * (bank->stackedDieCount-1)) << endl;
@@ -1167,6 +1355,7 @@ void Result::printToFile(int indent, const string &FileName) {
 													+ bank->subarray.mat.senseAmpMuxLev1.readDynamicEnergy
 													+ bank->subarray.mat.senseAmpMuxLev2.readDynamicEnergy) << endl;
 	outFile << string(indent, ' ') << "       |--- Precharge Dynamic Energy   = " << TO_JOULE(bank->subarray.mat.precharger.readDynamicEnergy) << endl;
+	PrintGcDRAMReadEnergy(outFile, indent, bank->subarray.mat, cell->memCellType);
 
 	if (cell->memCellType == PCRAM || cell->memCellType == FBRAM ||
 			(cell->memCellType == memristor && (cell->accessType == CMOS_access || cell->accessType == BJT_access))) {
@@ -1278,7 +1467,8 @@ void Result::printToFile(int indent, const string &FileName) {
 			outFile << string(indent, ' ') << "       |--- Bitline & Cell Write Energy= " << TO_JOULE(bank->subarray.mat.cellResetEnergy) << endl;
 		}
 	}
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+	PrintGcDRAMWriteEnergy(outFile, indent, bank->subarray.mat, cell->memCellType);
+    if (IsRefreshMemory(cell->memCellType)) {
         outFile << string(indent, ' ') << " - Refresh Dynamic Energy = " << TO_JOULE(bank->refreshDynamicEnergy) << endl;
         if (bank->stackedDieCount > 1 && bank->partitionGranularity == 0) {
             outFile << string(indent, ' ') << " |--- TSV Dynamic Energy    = " << TO_JOULE(bank->tsvArray.writeDynamicEnergy * (bank->stackedDieCount-1) * bank->tsvArray.numReadBits) << endl;
@@ -1294,14 +1484,31 @@ void Result::printToFile(int indent, const string &FileName) {
                 TO_JOULE(bank->subarray.refreshDynamicEnergy - bank->subarray.mat.refreshDynamicEnergy
                          * bank->numActiveMatPerRow * bank->numActiveMatPerColumn) << endl;
         outFile << string(indent, ' ') << "    |--- Mat Dynamic Energy   = " << TO_JOULE(bank->subarray.mat.refreshDynamicEnergy) << " per active mat" << endl;
-        outFile << string(indent, ' ') << "       |--- Row Decoder Dynamic Energy = " << TO_JOULE(bank->subarray.mat.rowDecoder.readDynamicEnergy) << endl;
-        if (inputParameter->internalSensing)
-            outFile << string(indent, ' ') << "       |--- Senseamp Dynamic Energy    = " << TO_JOULE(bank->subarray.mat.senseAmp.refreshDynamicEnergy) << endl;
-        outFile << string(indent, ' ') << "       |--- Precharge Dynamic Energy   = " << TO_JOULE(bank->subarray.mat.precharger.refreshDynamicEnergy) << endl; }
-    outFile.close();
+		if (cell->memCellType == gcDRAM) {
+			PrintGcDRAMRefreshEnergy(outFile, indent, bank->subarray.mat, cell->memCellType);
+		} else {
+			outFile << string(indent, ' ') << "       |--- Row Decoder Dynamic Energy Per Row = " << TO_JOULE(bank->subarray.mat.rowDecoder.readDynamicEnergy) << endl;
+			if (inputParameter->internalSensing)
+				outFile << string(indent, ' ') << "       |--- Senseamp Dynamic Energy Per Row    = " << TO_JOULE(bank->subarray.mat.senseAmp.readDynamicEnergy) << endl;
+			outFile << string(indent, ' ') << "       |--- Precharge Dynamic Energy Per Row   = " << TO_JOULE(bank->subarray.mat.precharger.readDynamicEnergy) << endl;
+		}
+	}
+	outFile << string(indent, ' ') << " - Leakage Power = " << TO_WATT(bank->leakage) << endl;
+	outFile << string(indent, ' ') << " -- Mat Leakage Power = " << TO_WATT(bank->subarray.mat.leakage) << endl;
+	PrintAOSLeakageUpperBound(outFile, indent, bank->subarray.mat);
+	if (IsRefreshMemory(cell->memCellType)) {
+		outFile << string(indent, ' ') << " - Refresh Power = "
+				<< TO_WATT(bank->refreshDynamicEnergy / cell->retentionTime) << endl;
+	}
 }
 
 void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
+	/* Cache-level refresh behavior follows the saved data-array cell. */
+	MemCell *const cell = cellTech;
+	if (!cell) {
+		cerr << "Result has no associated memory cell." << endl;
+		return;
+	}
 	if (bank->memoryType != MemoryType::data || tagResult.bank->memoryType != MemoryType::tag) {
 		cout << "This is not a valid cache configuration." << endl;
 		return;
@@ -1390,8 +1597,17 @@ void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
 			
 			// helper: convert (seconds * Hz) -> integer cycles
 			auto cycles = [&](double seconds) -> uint64_t {
-			    return static_cast<uint64_t>(std::ceil(seconds * inputParameter->clockFreq));
+			    const double roundedCycles = std::ceil(seconds * inputParameter->clockFreq);
+			    if (!std::isfinite(roundedCycles) || roundedCycles <= 0)
+			        return 0;
+			    if (roundedCycles >= static_cast<double>(std::numeric_limits<uint64_t>::max()))
+			        return std::numeric_limits<uint64_t>::max();
+			    return static_cast<uint64_t>(roundedCycles);
 			};
+			const bool refreshEnabled = IsRefreshMemory(cell->memCellType);
+			const uint64_t refreshGroupCount = static_cast<uint64_t>(bank->numRowMat)
+					* static_cast<uint64_t>(inputParameter->monolithic3DMat
+							? bank->subarray.mat.stackedMemTiers : 1);
 			
 			// NS-Cache Derived Parameteric Outputs
 			cout << "--l2_assoc " << inputParameter->associativity << " ";
@@ -1403,30 +1619,25 @@ void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
 			cout << "--l2_data_miss_latency "  << cycles(cacheMissLatency)  << " ";
 			cout << "--l2_data_write_latency " << cycles(cacheWriteLatency) << " ";
 			
-			if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
-			    if (inputParameter->monolithic3DMat) {
-			        cout << "--l2_refresh_period "
-			             << cycles(cell->retentionTime / bank->numRowMat / bank->subarray.mat.stackedMemTiers)
-			             << " ";
-			    } else {
-			        cout << "--l2_refresh_period "
-			             << cycles(cell->retentionTime / bank->numRowMat)
-			             << " ";
-			    }
+			if (refreshEnabled) {
+			    cout << "--l2_refresh_period "
+			         << cycles(cell->retentionTime / refreshGroupCount) << " ";
 			} else {
 			    // 1e20 will overflow uint64_t; use a clear integer sentinel instead
 			    cout << "--l2_refresh_period " << std::numeric_limits<uint64_t>::max() << " ";
 			}
 			
-			if (cell->memCellType == eDRAM) {
-			    cout << "--l2_refresh_latency " << cycles(bank->subarray.readLatency) << " ";
-			} else if (cell->memCellType == gcDRAM) {
-			    cout << "--l2_refresh_latency " << cycles(bank->subarray.readLatency + bank->subarray.writeLatency) << " ";
+			if (refreshEnabled) {
+			    /* gem5 models one blocking refresh event per emitted period.  The
+			     * bank value is the aggregate serialized sweep for one vertical
+			     * MAT/tier group: it includes DRAM restoration and, for gcDRAM,
+			     * both read and write paths.  Do not substitute response latency. */
+			    cout << "--l2_refresh_latency " << cycles(bank->refreshLatency) << " ";
 			} else {
 			    cout << "--l2_refresh_latency " << 0 << " ";
 			}
 			
-			cout << "--l2_refresh_enabled " << (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) << " ";
+			cout << "--l2_refresh_enabled " << refreshEnabled << " ";
 			
 			cout << "--data_read_latency "  << cycles(bank->subarray.readLatency) << " ";
 			cout << "--data_write_latency " << cycles(bank->subarray.writeLatency) << " ";
@@ -1448,7 +1659,7 @@ void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
 
 			cout << "-------------------------------------------------\n" << endl;
 		}
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+        if (IsRefreshMemory(cell->memCellType)) {
             cout << " - Cache Refresh Latency = " << MAX(tagResult.bank->refreshLatency, bank->refreshLatency) * 1e6 << "us per bank" << endl;
             cout << " - Cache Availability = " << ((cell->retentionTime - MAX(tagResult.bank->refreshLatency, bank->refreshLatency)) / cell->retentionTime) * 100.0 << "%" << endl;
         }
@@ -1456,13 +1667,13 @@ void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
 		cout << " - Cache Hit Dynamic Energy   = " << cacheHitDynamicEnergy * 1e9 << "nJ per access" << endl;
 		cout << " - Cache Miss Dynamic Energy  = " << cacheMissDynamicEnergy * 1e9 << "nJ per access" << endl;
 		cout << " - Cache Write Dynamic Energy = " << cacheWriteDynamicEnergy * 1e9 << "nJ per access" << endl;
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+        if (IsRefreshMemory(cell->memCellType)) {
             cout << " - Cache Refresh Dynamic Energy = " << (tagResult.bank->refreshDynamicEnergy + bank->refreshDynamicEnergy) * 1e9 << "nJ per bank" << endl;
         }
 		cout << " - Cache Total Leakage Power  = " << cacheLeakage * 1e3 << "mW" << endl;
 		cout << " |--- Cache Data Array Leakage Power = " << bank->leakage * 1e3 << "mW" << endl;
 		cout << " |--- Cache Tag Array Leakage Power  = " << tagResult.bank->leakage * 1e3 << "mW" << endl;
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+        if (IsRefreshMemory(cell->memCellType)) {
             cout << " - Cache Refresh Power = " << TO_WATT(bank->refreshDynamicEnergy / (cell->retentionTime)) << " per bank" << endl;
         }
         if (inputParameter->printLevel > 0) {
@@ -1474,7 +1685,13 @@ void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
 	}
 }
 
-void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &FileName) {
+void Result::printAsCacheToFile(Result &tagResult, CacheAccessMode cacheAccessMode, const string &FileName) {
+	/* Cache-level refresh behavior follows the saved data-array cell. */
+	MemCell *const cell = cellTech;
+	if (!cell) {
+		cerr << "Result has no associated memory cell." << endl;
+		return;
+	}
     // Attempt to open the file
     ofstream outFile(FileName.c_str());
     if (!outFile.is_open()) {
@@ -1482,7 +1699,7 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
         return;
     }
 
-    if (bank->memoryType != MemoryType::data) {
+    if (bank->memoryType != MemoryType::data || tagResult.bank->memoryType != MemoryType::tag) {
         outFile << "This is not a valid cache configuration." << endl;
         outFile.close();
         return;
@@ -1497,39 +1714,35 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
 	    double cacheArea = 0;
 
 	    if (cacheAccessMode == normal_access_mode) {
-	        // Calculate latencies
-	        cacheHitLatency = bank->subarray.readLatency;
-	        cacheHitLatency += bank->subarray.mat.columnDecoderLatency;  // add column decoder latency after hit
-	        cacheHitLatency += bank->readLatency - bank->subarray.readLatency; // H-tree in and out latency
-	        cacheWriteLatency = bank->writeLatency;
+	        cacheMissLatency = tagResult.bank->readLatency;
+	        cacheHitLatency = MAX(tagResult.bank->readLatency, bank->subarray.readLatency);
+	        cacheHitLatency += bank->subarray.mat.columnDecoderLatency;
+	        cacheHitLatency += bank->readLatency - bank->subarray.readLatency;
+	        cacheWriteLatency = MAX(tagResult.bank->writeLatency, bank->writeLatency);
 
-	        // Calculate power
-	        cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
-	        cacheHitDynamicEnergy = bank->readDynamicEnergy;
-	        cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
+	        cacheMissDynamicEnergy = tagResult.bank->readDynamicEnergy + bank->readDynamicEnergy;
+	        cacheHitDynamicEnergy = tagResult.bank->readDynamicEnergy + bank->readDynamicEnergy;
+	        cacheWriteDynamicEnergy = tagResult.bank->writeDynamicEnergy + bank->writeDynamicEnergy;
 	    } else if (cacheAccessMode == fast_access_mode) {
-	        // Calculate latencies
-	        cacheHitLatency = bank->readLatency;
-	        cacheWriteLatency = bank->writeLatency;
+	        cacheMissLatency = tagResult.bank->readLatency;
+	        cacheHitLatency = MAX(tagResult.bank->readLatency, bank->readLatency);
+	        cacheWriteLatency = MAX(tagResult.bank->writeLatency, bank->writeLatency);
 
-	        // Calculate power
-	        cacheMissDynamicEnergy += bank->readDynamicEnergy;          // data is also partially accessed
-	        cacheHitDynamicEnergy = bank->readDynamicEnergy;
-	        cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
+	        cacheMissDynamicEnergy = tagResult.bank->readDynamicEnergy + bank->readDynamicEnergy;
+	        cacheHitDynamicEnergy = tagResult.bank->readDynamicEnergy + bank->readDynamicEnergy;
+	        cacheWriteDynamicEnergy = tagResult.bank->writeDynamicEnergy + bank->writeDynamicEnergy;
 	    } else { // sequential access
-	        // Calculate latencies
-	        cacheHitLatency = bank->readLatency;
-	        cacheWriteLatency = bank->writeLatency;
+	        cacheMissLatency = tagResult.bank->readLatency;
+	        cacheHitLatency = tagResult.bank->readLatency + bank->readLatency;
+	        cacheWriteLatency = MAX(tagResult.bank->writeLatency, bank->writeLatency);
 
-	        // Calculate power
-	        cacheHitDynamicEnergy = bank->readDynamicEnergy;
-	        cacheWriteDynamicEnergy = bank->writeDynamicEnergy;
+	        cacheMissDynamicEnergy = tagResult.bank->readDynamicEnergy;
+	        cacheHitDynamicEnergy = tagResult.bank->readDynamicEnergy + bank->readDynamicEnergy;
+	        cacheWriteDynamicEnergy = tagResult.bank->writeDynamicEnergy + bank->writeDynamicEnergy;
 	    }
 
-	    // Calculate leakage
-	    cacheLeakage = bank->leakage;
-	    // Calculate area
-	    cacheArea = bank->area;
+	    cacheLeakage = tagResult.bank->leakage + bank->leakage;
+	    cacheArea = tagResult.bank->area + bank->area;
 
         // Now write to the file instead of the console
         outFile << endl
@@ -1553,6 +1766,8 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
         outFile << " - Total Area = " << cacheArea * 1e6 << "mm^2" << endl;
         outFile << " |--- Data Array Area = " << bank->height * 1e6 << "um x "
                 << bank->width * 1e6 << "um = " << bank->area * 1e6 << "mm^2" << endl;
+		outFile << " |--- Tag Array Area  = " << tagResult.bank->height * 1e6 << "um x "
+				<< tagResult.bank->width * 1e6 << "um = " << tagResult.bank->area * 1e6 << "mm^2" << endl;
 
         // Timing
         outFile << "Timing:" << endl;
@@ -1561,6 +1776,7 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
         outFile << " - Cache Write Latency = " << cacheWriteLatency * 1e9 << "ns" << endl;
 		if(inputParameter->quantize) {
 			outFile << "Cycle Timing:" << endl;
+			outFile << " - Clock Frequency    = " << inputParameter->clockFreq / 1e6 << "MHz" << endl;
 			outFile << " - Cache Hit Cycles   = " << ceil(cacheHitLatency * inputParameter->clockFreq) << " cycles" << endl;
 			outFile << " - Cache Miss Cycles  = " << ceil(cacheMissLatency * inputParameter->clockFreq) << " cycles" << endl;
 			outFile << " - Cache Write Cycles = " << ceil(cacheWriteLatency * inputParameter->clockFreq) << " cycles" << endl;
@@ -1568,14 +1784,18 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
 			outFile << " - Cache Data SubArray Write Cycles = " << ceil(bank->subarray.writeLatency * inputParameter->clockFreq) << " cycles" << endl;
 			outFile << " - Cache Data Mat Read Cycles  = " << ceil(bank->subarray.mat.readLatency * inputParameter->clockFreq) << " cycles" << endl;
 			outFile << " - Cache Data Mat Write Cycles = " << ceil(bank->subarray.mat.writeLatency * inputParameter->clockFreq) << " cycles" << endl;
+			outFile << " - Cache Tag SubArray Read Cycles  = " << ceil(tagResult.bank->subarray.readLatency * inputParameter->clockFreq) << " cycles" << endl;
+			outFile << " - Cache Tag SubArray Write Cycles = " << ceil(tagResult.bank->subarray.writeLatency * inputParameter->clockFreq) << " cycles" << endl;
+			outFile << " - Cache Tag Mat Read Cycles  = " << ceil(tagResult.bank->subarray.mat.readLatency * inputParameter->clockFreq) << " cycles" << endl;
+			outFile << " - Cache Tag Mat Write Cycles = " << ceil(tagResult.bank->subarray.mat.writeLatency * inputParameter->clockFreq) << " cycles" << endl;
 		}
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+		if (IsRefreshMemory(cell->memCellType)) {
+			const double cacheRefreshLatency = MAX(tagResult.bank->refreshLatency, bank->refreshLatency);
 	        outFile << " - Cache Refresh Latency = "
-	                << bank->refreshLatency * 1e6
+	                << cacheRefreshLatency * 1e6
 	                << "us per bank" << endl;
 	        outFile << " - Cache Availability = "
-	                << ((cell->retentionTime -
-	                     bank->refreshLatency) /
+	                << ((cell->retentionTime - cacheRefreshLatency) /
 	                    cell->retentionTime) *
 	                       100.0
                     << "%" << endl;
@@ -1589,14 +1809,15 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
                 << "nJ per access" << endl;
         outFile << " - Cache Write Dynamic Energy = " << cacheWriteDynamicEnergy * 1e9
                 << "nJ per access" << endl;
-	    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+	    if (IsRefreshMemory(cell->memCellType)) {
 	        outFile << " - Cache Refresh Dynamic Energy = "
-	                << (bank->refreshDynamicEnergy) * 1e9
+	                << (tagResult.bank->refreshDynamicEnergy + bank->refreshDynamicEnergy) * 1e9
 	                << "nJ per bank" << endl;
 	    }
 	    outFile << " - Cache Total Leakage Power  = " << cacheLeakage * 1e3 << "mW" << endl;
 	    outFile << " |--- Cache Data Array Leakage Power = " << bank->leakage * 1e3 << "mW" << endl;
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+		outFile << " |--- Cache Tag Array Leakage Power  = " << tagResult.bank->leakage * 1e3 << "mW" << endl;
+        if (IsRefreshMemory(cell->memCellType)) {
             outFile << " - Cache Refresh Power = "
                     << TO_WATT(bank->refreshDynamicEnergy / (cell->retentionTime))
                     << " per bank" << endl;
@@ -1605,13 +1826,9 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
         // Print details if needed
         if (inputParameter->printLevel > 0) {
             outFile << endl << "CACHE DATA ARRAY DETAILS";
-            // Instead of 'print(4)', you might have to implement a similar method that takes
-            // an output stream reference if it prints. Or you can adapt it similarly
-            // to this approach. For demonstration, it's shown as is:
-            printToFile(4, FileName); // You would need to modify 'print' to accept an ofstream.
-            
-            //outFile << endl << "CACHE TAG ARRAY DETAILS";
-            //tagResult.printToFile(4, FileName); // Similarly, modify to accept an ofstream.
+			printToStream(4, outFile);
+			outFile << endl << "CACHE TAG ARRAY DETAILS";
+			tagResult.printToStream(4, outFile);
         }
     }
 
@@ -1620,6 +1837,12 @@ void Result::printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &F
 }
 
 void Result::printToCsvFile(ofstream &outputFile) {
+	/* Deliberately shadow the process-wide exploration pointer with this snapshot's cell. */
+	MemCell *const cell = cellTech;
+	if (!cell) {
+		cerr << "Result has no associated memory cell." << endl;
+		return;
+	}
 	cout << "in print output csv loop" << endl;
 	outputFile << bank->numRowSubArray << "," << bank->numColumnSubArray << "," << bank->stackedDieCount << "," << bank->numActiveSubArrayPerColumn << "," << bank->numActiveSubArrayPerRow << ",";
 	outputFile << bank->numRowMat << "," << bank->numColumnMat << "," << bank->numActiveMatPerColumn << "," << bank->numActiveMatPerRow << ",";
@@ -1752,19 +1975,19 @@ void Result::printToCsvFile(ofstream &outputFile) {
 	outputFile << bank->subarray.mat.height * 1e6 << "," << bank->subarray.mat.width * 1e6 << "," << bank->subarray.mat.area * 1e6 << ",";
 	outputFile << cell->area * tech->featureSize * tech->featureSize * bank->capacity / bank->area * 100 << ",";
 	outputFile << bank->readLatency * 1e9 << "," << bank->writeLatency * 1e9 << ",";
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+    if (IsRefreshMemory(cell->memCellType)) {
         outputFile << bank->refreshLatency * 1e9 << ",";
     } else {
         outputFile << "0,";
     }
 	outputFile << bank->readDynamicEnergy * 1e12 << "," << bank->writeDynamicEnergy * 1e12 << ",";
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+    if (IsRefreshMemory(cell->memCellType)) {
         outputFile << bank->refreshDynamicEnergy * 1e12 << ",";
     } else {
         outputFile << "0,";
     }
 	outputFile << bank->leakage * 1e3 << ",";
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+    if (IsRefreshMemory(cell->memCellType)) {
         outputFile << TO_WATT(bank->refreshDynamicEnergy / (cell->retentionTime)) << ",";
     } else {
         outputFile << "0,";
@@ -1780,6 +2003,12 @@ void Result::printToCsvFile(ofstream &outputFile) {
 }
 
 void Result::printAsCacheToCsvFile(Result &tagResult, CacheAccessMode cacheAccessMode, ofstream &outputFile) {
+	/* Cache-level refresh behavior follows the saved data-array cell. */
+	MemCell *const cell = cellTech;
+	if (!cell) {
+		cerr << "Result has no associated memory cell." << endl;
+		return;
+	}
 	if (bank->memoryType != MemoryType::data || tagResult.bank->memoryType != MemoryType::tag) {
 		cout << "This is not a valid cache configuration." << endl;
 		return;
@@ -1840,7 +2069,7 @@ void Result::printAsCacheToCsvFile(Result &tagResult, CacheAccessMode cacheAcces
 		outputFile << cacheHitLatency * 1e9 << ",";
 		outputFile << cacheMissLatency * 1e9 << ",";
 		outputFile << cacheWriteLatency * 1e9 << ",";
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+        if (IsRefreshMemory(cell->memCellType)) {
             outputFile << MAX(tagResult.bank->refreshLatency, bank->refreshLatency) * 1e9 << ",";
         } else {
             outputFile << "0,";
@@ -1848,13 +2077,13 @@ void Result::printAsCacheToCsvFile(Result &tagResult, CacheAccessMode cacheAcces
 		outputFile << cacheHitDynamicEnergy * 1e9 << ",";
 		outputFile << cacheMissDynamicEnergy * 1e9 << ",";
 		outputFile << cacheWriteDynamicEnergy * 1e9 << ",";
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+        if (IsRefreshMemory(cell->memCellType)) {
             outputFile << (tagResult.bank->refreshDynamicEnergy + bank->refreshDynamicEnergy) * 1e9 << ",";
         } else {
             outputFile << "0,";
         }
 		outputFile << cacheLeakage * 1e3 << ",";
-        if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+        if (IsRefreshMemory(cell->memCellType)) {
             outputFile << TO_WATT(bank->refreshDynamicEnergy / (cell->retentionTime)) << ",";
         } else {
             outputFile << "0,";

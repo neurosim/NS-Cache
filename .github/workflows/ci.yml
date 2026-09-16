@@ -1,0 +1,17 @@
+name: C++ model integration
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test-sanitize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Build, test, and run sanitizers
+        run: make -C src ci

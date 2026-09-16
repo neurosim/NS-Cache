@@ -21,7 +21,260 @@
 #include "formula.h"
 #include "global.h"
 #include "macros.h"
+#include <cerrno>
+#include <cctype>
+#include <cmath>
+#include <iomanip>
 #include <math.h>
+#include <stdexcept>
+#include <string>
+
+namespace {
+
+bool IsAOSCell(MemCellType type) {
+	return type == eDRAM || type == gcDRAM;
+}
+
+string Trim(const string &value) {
+	size_t first = 0;
+	while (first < value.size() && isspace(static_cast<unsigned char>(value[first])))
+		++first;
+	size_t last = value.size();
+	while (last > first && isspace(static_cast<unsigned char>(value[last - 1])))
+		--last;
+	return value.substr(first, last - first);
+}
+
+string Lower(string value) {
+	for (size_t i = 0; i < value.size(); ++i)
+		value[i] = static_cast<char>(tolower(static_cast<unsigned char>(value[i])));
+	return value;
+}
+
+void FailCellFile(const string &inputFile, const string &message) {
+	cerr << "Invalid cell file '" << inputFile << "': " << message << endl;
+	exit(-1);
+}
+
+bool SplitSetting(const string &line, string *key, string *value) {
+	size_t colon = line.find(':');
+	if (colon == string::npos)
+		return false;
+	*key = Trim(line.substr(0, colon));
+	*value = Trim(line.substr(colon + 1));
+	return true;
+}
+
+double ParseFiniteCellDouble(const string &inputFile, const string &key,
+		const string &value) {
+	if (value.empty())
+		FailCellFile(inputFile, key + " requires a value");
+	errno = 0;
+	char *end = NULL;
+	double parsed = strtod(value.c_str(), &end);
+	while (end != NULL && isspace(static_cast<unsigned char>(*end)))
+		++end;
+	if (end == value.c_str() || end == NULL || *end != '\0' || errno == ERANGE
+			|| !std::isfinite(parsed)) {
+		FailCellFile(inputFile, key + " requires one finite numeric value with no trailing text");
+	}
+	return parsed;
+}
+
+double ParseFiniteCellVoltage(const string &inputFile, const string &key,
+		const string &value) {
+	if (Lower(value) == "vdd") {
+		if (tech == NULL || !std::isfinite(tech->vdd))
+			FailCellFile(inputFile, key + " cannot resolve vdd before technology initialization");
+		return tech->vdd;
+	}
+	return ParseFiniteCellDouble(inputFile, key, value);
+}
+
+bool ParseStrictCellBool(const string &inputFile, const string &key,
+		const string &value) {
+	string normalized = Lower(value);
+	if (normalized == "true" || normalized == "yes" || normalized == "1")
+		return true;
+	if (normalized == "false" || normalized == "no" || normalized == "0")
+		return false;
+	FailCellFile(inputFile, key + " expects yes/no, true/false, or 1/0");
+	return false;
+}
+
+void InitializeAOSParameterSet(OxideTransistorParameterSet *transistor) {
+	transistor->initialized = false;
+	transistor->temperatureSpecified = false;
+	transistor->widthSpecified = false;
+	transistor->lengthSpecified = false;
+	transistor->overlapCapacitanceSpecified = false;
+	transistor->mobilitySpecified = false;
+	transistor->mobilityScaleSpecified = false;
+	transistor->leakageScaleSpecified = false;
+	transistor->flatBandVoltageSpecified = false;
+	transistor->contactResistanceSpecified = false;
+	transistor->wordlineBoostVoltageSpecified = false;
+	transistor->wordlineHoldVoltageSpecified = false;
+	transistor->wordlineBoostVoltage = 0;
+	transistor->wordlineHoldVoltage = 0;
+	transistor->parameters = AOSFETCompactModel::DefaultParameters();
+	transistor->operatingPoint = AOSDeviceOperatingPoint{};
+}
+
+bool ParseAOSParameter(const string &inputFile, const string &rawKey,
+		const string &value, const string &prefix,
+		OxideTransistorParameterSet *transistor) {
+	if (rawKey.compare(0, prefix.size(), prefix) != 0)
+		return false;
+	/* AOS dimensions and calibration values are unit-sensitive.  Match the
+	 * complete legacy key so a misspelled or different unit cannot silently be
+	 * interpreted as the unit expected by the compact model. */
+	string field = rawKey.substr(prefix.size());
+	if (field.empty())
+		FailCellFile(inputFile, "missing AOS field name after " + prefix);
+	double parsed = 0;
+	bool handled = true;
+
+	if (field == "Temperature (K)") {
+		parsed = ParseFiniteCellDouble(inputFile, rawKey, value);
+		transistor->parameters.temperature = parsed;
+		transistor->temperatureSpecified = true;
+	} else if (field == "TailTemperature (K)") {
+		transistor->parameters.tailTemperature = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "Width (m)") {
+		transistor->parameters.width = ParseFiniteCellDouble(inputFile, rawKey, value);
+		transistor->widthSpecified = true;
+	} else if (field == "Length (m)") {
+		transistor->parameters.length = ParseFiniteCellDouble(inputFile, rawKey, value);
+		transistor->lengthSpecified = true;
+	} else if (field == "OverlapCapacitance (F)") {
+		transistor->parameters.overlapCapacitance = ParseFiniteCellDouble(inputFile, rawKey, value);
+		transistor->overlapCapacitanceSpecified = true;
+	} else if (field == "FlatBandVoltage (V)") {
+		transistor->parameters.flatBandVoltage = ParseFiniteCellDouble(inputFile, rawKey, value);
+		transistor->flatBandVoltageSpecified = true;
+	} else if (field == "Mobility (cm^2/Vs)" || field == "Mu (cm^2/Vs)") {
+		transistor->parameters.mobility = ParseFiniteCellDouble(inputFile, rawKey, value) * 1e-4;
+		transistor->parameters.useConstantMobility = true;
+		transistor->mobilitySpecified = true;
+	} else if (field == "MobilityScale") {
+		transistor->parameters.mobilityScale = ParseFiniteCellDouble(inputFile, rawKey, value);
+		transistor->mobilityScaleSpecified = true;
+	} else if (field == "LeakageScale") {
+		transistor->parameters.leakageScale = ParseFiniteCellDouble(inputFile, rawKey, value);
+		transistor->leakageScaleSpecified = true;
+	} else if (field == "TotalContactResistance (kOhm-um)"
+			|| field == "TotalContactResistanceKohmUm") {
+		transistor->parameters.totalContactResistanceKohmUm =
+				ParseFiniteCellDouble(inputFile, rawKey, value);
+		transistor->contactResistanceSpecified = true;
+	} else if (field == "BoostVoltage (V)" || field == "OnGateVoltage (V)") {
+		transistor->wordlineBoostVoltage = ParseFiniteCellVoltage(inputFile, rawKey, value);
+		transistor->wordlineBoostVoltageSpecified = true;
+	} else if (field == "HoldVoltage (V)" || field == "OffGateVoltage (V)") {
+		transistor->wordlineHoldVoltage = ParseFiniteCellVoltage(inputFile, rawKey, value);
+		transistor->wordlineHoldVoltageSpecified = true;
+	} else if (field == "ElementaryCharge (C)") {
+		transistor->parameters.q = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "BoltzmannConstant (J/K)") {
+		transistor->parameters.k = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "VacuumPermittivity (F/m)") {
+		transistor->parameters.eps0 = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "SemiconductorPermittivity (F/m)") {
+		transistor->parameters.semiconductorPermittivity = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "Nu0T0") {
+		transistor->parameters.nu0T0 = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "TrapDensity") {
+		transistor->parameters.trapDensity = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "FermiReference") {
+		transistor->parameters.fermiReference = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "OxideCapacitance (F/m^2)") {
+		transistor->parameters.oxideCapacitance = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "VRHThreshold (V)") {
+		transistor->parameters.vrhThreshold = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "PercolationThreshold (V)") {
+		transistor->parameters.percolationThreshold = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "VRHPrefactor (cm^2/Vs)") {
+		transistor->parameters.vrhPrefactor = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "PercolationPrefactor (cm^2/Vs)") {
+		transistor->parameters.percolationPrefactor = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "PercolationExponent") {
+		transistor->parameters.percolationExponent = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "LeakageSwingFactor") {
+		transistor->parameters.leakageSwingFactor = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "LeakageSurfacePotentialReference (V)") {
+		transistor->parameters.leakageSurfacePotentialReference = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else if (field == "CurrentFloor (A)") {
+		transistor->parameters.currentFloor = ParseFiniteCellDouble(inputFile, rawKey, value);
+	} else {
+		handled = false;
+	}
+
+	if (!handled)
+		FailCellFile(inputFile, "unknown or unused AOS field '" + rawKey + "'");
+	transistor->initialized = true;
+	return true;
+}
+
+void ValidateAOSParameterSet(const string &inputFile, const char *name,
+		OxideTransistorParameterSet &transistor) {
+	string missing;
+	auto AddMissing = [&](const char *field) {
+		if (!missing.empty())
+			missing += ", ";
+		missing += field;
+	};
+	if (!transistor.temperatureSpecified) AddMissing("temperature");
+	if (!transistor.widthSpecified) AddMissing("width");
+	if (!transistor.lengthSpecified) AddMissing("length");
+	if (!transistor.overlapCapacitanceSpecified) AddMissing("overlap capacitance");
+	if (!transistor.flatBandVoltageSpecified) AddMissing("flat-band voltage");
+	if (!transistor.leakageScaleSpecified) AddMissing("leakage scale");
+	if (!transistor.contactResistanceSpecified) AddMissing("contact resistance");
+	if (!transistor.wordlineBoostVoltageSpecified) AddMissing("on/boost gate voltage");
+	if (!transistor.wordlineHoldVoltageSpecified) AddMissing("off/hold gate voltage");
+	if (!transistor.mobilitySpecified && !transistor.mobilityScaleSpecified)
+		AddMissing("Mobility/Mu or MobilityScale");
+	if (!missing.empty())
+		FailCellFile(inputFile, string(name) + " AOS transistor is incomplete; missing " + missing);
+	if (transistor.wordlineBoostVoltage <= transistor.wordlineHoldVoltage)
+		FailCellFile(inputFile, string(name) + " AOS on/boost voltage must exceed off/hold voltage");
+	if (inputParameter == NULL || tech == NULL || !std::isfinite(tech->vdd) || tech->vdd <= 0)
+		FailCellFile(inputFile, string(name) + " AOS validation requires top-level configuration");
+	if (fabs(transistor.parameters.temperature - inputParameter->temperature) > 1e-9)
+		FailCellFile(inputFile, string(name) + " AOS temperature must match the top-level operating temperature");
+	try {
+		AOSFETCompactModel model(transistor.parameters);
+		transistor.operatingPoint = model.EvaluateOperatingPoint(
+				transistor.wordlineBoostVoltage,
+				transistor.wordlineHoldVoltage, tech->vdd);
+	} catch (const std::exception &error) {
+		FailCellFile(inputFile, string(name) + " AOS transistor is invalid: " + error.what());
+	}
+}
+
+void PrintAOSParameterSet(int indent, const char *name,
+		const OxideTransistorParameterSet &transistor) {
+	ios::fmtflags flags = cout.flags();
+	streamsize precision = cout.precision();
+	cout << scientific << setprecision(3);
+	cout << string(indent, ' ') << name << " AOS transistor (compact-model v1):" << endl;
+	cout << string(indent + 2, ' ') << "Temperature: " << transistor.parameters.temperature << "K" << endl;
+	cout << string(indent + 2, ' ') << "Width/length: " << transistor.parameters.width
+			<< "m/" << transistor.parameters.length << "m" << endl;
+	cout << string(indent + 2, ' ') << "Off/on gate voltage: "
+			<< transistor.wordlineHoldVoltage << "V/" << transistor.wordlineBoostVoltage << "V" << endl;
+	cout << string(indent + 2, ' ') << "Overlap capacitance: "
+			<< transistor.parameters.overlapCapacitance << "F" << endl;
+	cout << string(indent + 2, ' ') << "Mobility scale / leakage scale: "
+			<< transistor.parameters.mobilityScale << "/" << transistor.parameters.leakageScale << endl;
+	cout << string(indent + 2, ' ') << "Total contact resistance: "
+			<< transistor.parameters.totalContactResistanceKohmUm << "kOhm-um" << endl;
+	cout.flags(flags);
+	cout.precision(precision);
+}
+
+} // namespace
 
 MemCell::MemCell() {
 	// TODO Auto-generated constructor stub
@@ -59,6 +312,10 @@ MemCell::MemCell() {
 	capDRAMCell		  = 0;
 	widthSRAMCellNMOS = 2.08;	/* Default NMOS width in SRAM cells is 2.08 (from CACTI) */
 	widthSRAMCellPMOS = 1.23;	/* Default PMOS width in SRAM cells is 1.23 (from CACTI) */
+	oxideTransistor = false;
+	InitializeAOSParameterSet(&oxideAccessTransistor);
+	InitializeAOSParameterSet(&oxideReadTransistor);
+	InitializeAOSParameterSet(&oxideWriteTransistor);
 
 	/*For memristors */
 	readFloating = false;
@@ -73,6 +330,9 @@ MemCell::MemCell() {
 
     retentionTime = invalid_value;
 	temperature = 300;
+	retentionAOSOffCurrentRatio = false;
+	retentionReferenceHoldVoltageSpecified = false;
+	retentionReferenceHoldVoltage = 0;
 }
 
 MemCell::~MemCell() {
@@ -84,6 +344,9 @@ void MemCell::ReadCellFromFile(const string & inputFile)
 	FILE *fp = fopen(inputFile.c_str(), "r");
 	char line[5000];
 	char tmp[5000];
+	bool oxideControlSpecified = false;
+	bool oxideFieldSpecified = false;
+	bool retentionModelSpecified = false;
 
 	if (!fp) {
 		cout << inputFile << " cannot be found!\n";
@@ -92,6 +355,70 @@ void MemCell::ReadCellFromFile(const string & inputFile)
 	}
 
 	while (fscanf(fp, "%[^\n]\n", line) != EOF) {
+		string trimmedLine = Trim(line);
+		string settingKey;
+		string settingValue;
+		bool hasSetting = SplitSetting(line, &settingKey, &settingValue);
+		if (!hasSetting && (trimmedLine.compare(0, strlen("-Oxide"), "-Oxide") == 0
+				|| trimmedLine.compare(0, strlen("-RetentionModel"), "-RetentionModel") == 0
+				|| trimmedLine.compare(0, strlen("-RetentionReferenceHoldVoltage"),
+						"-RetentionReferenceHoldVoltage") == 0)) {
+			FailCellFile(inputFile, "malformed AOS/retention setting '" + trimmedLine + "'");
+		}
+		if (hasSetting) {
+			if (settingKey == "-OxideTransistor") {
+				if (oxideControlSpecified)
+					FailCellFile(inputFile, "-OxideTransistor may be specified only once");
+				oxideTransistor = ParseStrictCellBool(inputFile, settingKey, settingValue);
+				oxideControlSpecified = true;
+				continue;
+			}
+			if (settingKey.compare(0, strlen("-OxideAccessTransistor"),
+					"-OxideAccessTransistor") == 0) {
+				ParseAOSParameter(inputFile, settingKey, settingValue,
+						"-OxideAccessTransistor", &oxideAccessTransistor);
+				oxideFieldSpecified = true;
+				continue;
+			}
+			if (settingKey.compare(0, strlen("-OxideReadTransistor"),
+					"-OxideReadTransistor") == 0) {
+				ParseAOSParameter(inputFile, settingKey, settingValue,
+						"-OxideReadTransistor", &oxideReadTransistor);
+				oxideFieldSpecified = true;
+				continue;
+			}
+			if (settingKey.compare(0, strlen("-OxideWriteTransistor"),
+					"-OxideWriteTransistor") == 0) {
+				ParseAOSParameter(inputFile, settingKey, settingValue,
+						"-OxideWriteTransistor", &oxideWriteTransistor);
+				oxideFieldSpecified = true;
+				continue;
+			}
+			if (settingKey.compare(0, strlen("-Oxide"), "-Oxide") == 0)
+				FailCellFile(inputFile, "unknown AOS setting '" + settingKey + "'");
+			if (settingKey == "-RetentionModel") {
+				if (retentionModelSpecified)
+					FailCellFile(inputFile, "-RetentionModel may be specified only once");
+				if (settingValue != "AOSOffCurrentRatio")
+					FailCellFile(inputFile, "unsupported -RetentionModel '" + settingValue + "'");
+				retentionAOSOffCurrentRatio = true;
+				retentionModelSpecified = true;
+				continue;
+			}
+			if (settingKey == "-RetentionReferenceHoldVoltage (V)") {
+				if (retentionReferenceHoldVoltageSpecified)
+					FailCellFile(inputFile, "-RetentionReferenceHoldVoltage may be specified only once");
+				retentionReferenceHoldVoltage = ParseFiniteCellVoltage(
+						inputFile, settingKey, settingValue);
+				retentionReferenceHoldVoltageSpecified = true;
+				continue;
+			}
+			if (settingKey.compare(0, strlen("-RetentionModel"), "-RetentionModel") == 0
+					|| settingKey.compare(0, strlen("-RetentionReferenceHoldVoltage"),
+							"-RetentionReferenceHoldVoltage") == 0) {
+				FailCellFile(inputFile, "unknown retention setting '" + settingKey + "'");
+			}
+		}
 		if (!strncmp("-MemCellType", line, strlen("-MemCellType"))) {
 			sscanf(line, "-MemCellType: %s", tmp);
 			if (!strcmp(tmp, "SRAM"))
@@ -437,6 +764,32 @@ void MemCell::ReadCellFromFile(const string & inputFile)
 	}
 
 	fclose(fp);
+
+	if (oxideFieldSpecified && (!oxideControlSpecified || !oxideTransistor))
+		FailCellFile(inputFile, "AOS transistor fields require -OxideTransistor: true");
+	if (oxideTransistor && !IsAOSCell(memCellType))
+		FailCellFile(inputFile, "-OxideTransistor is supported only for eDRAM and gcDRAM");
+	if (oxideTransistor && memCellType == eDRAM) {
+		if (oxideReadTransistor.initialized || oxideWriteTransistor.initialized)
+			FailCellFile(inputFile, "eDRAM accepts only -OxideAccessTransistor fields");
+		ValidateAOSParameterSet(inputFile, "eDRAM access", oxideAccessTransistor);
+	}
+	if (oxideTransistor && memCellType == gcDRAM) {
+		if (oxideAccessTransistor.initialized)
+			FailCellFile(inputFile, "gcDRAM accepts only read/write AOS transistor fields");
+		ValidateAOSParameterSet(inputFile, "gcDRAM read", oxideReadTransistor);
+		ValidateAOSParameterSet(inputFile, "gcDRAM write", oxideWriteTransistor);
+	}
+	if (retentionAOSOffCurrentRatio) {
+		if (memCellType != eDRAM || !oxideTransistor)
+			FailCellFile(inputFile, "AOSOffCurrentRatio retention is supported only for AOS eDRAM");
+		if (retentionTime == invalid_value)
+			FailCellFile(inputFile, "AOSOffCurrentRatio requires a supplied -RetentionTime");
+		if (!retentionReferenceHoldVoltageSpecified)
+			FailCellFile(inputFile, "AOSOffCurrentRatio requires -RetentionReferenceHoldVoltage");
+	}
+	if (retentionReferenceHoldVoltageSpecified && !retentionAOSOffCurrentRatio)
+		FailCellFile(inputFile, "-RetentionReferenceHoldVoltage is unused without -RetentionModel: AOSOffCurrentRatio");
 }
 
 
@@ -448,8 +801,34 @@ void MemCell::ApplyPVT() {
 
     if (memCellType == eDRAM || memCellType == gcDRAM) {
         cout << "[Info] Retention time given at " << temperature << "K is " << retentionTime * 1e6 << "us" << endl;
+		if (retentionAOSOffCurrentRatio) {
+			try {
+				AOSFETCompactModel model(oxideAccessTransistor.parameters);
+				double referenceCurrent = model.CalculateDrainCurrentExternal(
+						retentionReferenceHoldVoltage, tech->vdd);
+				/* The configured-bias current was validated and cached when the
+				 * cell schema was parsed.  Only the optional reference bias needs
+				 * another compact-model evaluation. */
+				double appliedCurrent = oxideAccessTransistor.operatingPoint.Ioff;
+				if (!std::isfinite(referenceCurrent) || !std::isfinite(appliedCurrent)
+						|| referenceCurrent <= 0 || appliedCurrent <= 0) {
+					throw std::runtime_error("invalid off current");
+				}
+				double currentRatio = referenceCurrent / appliedCurrent;
+				retentionTime *= currentRatio;
+				cout << "[Info] AOSOffCurrentRatio retention: reference/applied Ioff ratio = "
+						<< currentRatio << endl;
+			} catch (const std::exception &error) {
+				cerr << "AOS retention evaluation failed: " << error.what() << endl;
+				exit(-1);
+			}
+		}
         double exponent = -0.0268 * (inputParameter->temperature - temperature);
         retentionTime = retentionTime * exp(exponent);
+		if (!std::isfinite(retentionTime) || retentionTime <= 0) {
+			cerr << "Retention calculation produced an invalid value." << endl;
+			exit(-1);
+		}
         cout << "[Info] Retention time at " << inputParameter->temperature << "K is " << retentionTime * 1e6 << "us" << endl;
     }
 }
@@ -724,5 +1103,12 @@ void MemCell::PrintCell(int indent)
 		cout << string(indent, ' ') << "Programming Time   : " << TO_SECOND(flashProgramTime) << endl;
 		cout << string(indent, ' ') << "Erase Time         : " << TO_SECOND(flashEraseTime) << endl;
 		cout << string(indent, ' ') << "Gate Coupling Ratio: " << gateCouplingRatio << endl;
+	}
+
+	if (oxideTransistor && memCellType == eDRAM) {
+		PrintAOSParameterSet(indent, "Access", oxideAccessTransistor);
+	} else if (oxideTransistor && memCellType == gcDRAM) {
+		PrintAOSParameterSet(indent, "Read", oxideReadTransistor);
+		PrintAOSParameterSet(indent, "Write", oxideWriteTransistor);
 	}
 }

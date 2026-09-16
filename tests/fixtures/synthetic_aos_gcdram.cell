@@ -1,0 +1,71 @@
+# Synthetic functionality fixture only; not an authoritative calibrated AOS cell.
+-MemCellType: gcDRAM
+-CellArea (F^2): 60
+-CellAspectRatio: 1.46
+-ReadMode: voltage
+-AccessType: CMOS
+-DRAMCellCapacitance (F): 13e-15
+-ResetVoltage (V): vdd
+-SetVoltage (V): vdd
+-MinSenseVoltage (mV): 10
+-RetentionTime (us): 40
+-Temperature (K): 300
+
+-OxideTransistor: YES
+-OxideReadTransistorTemperature (K): 300
+-OxideReadTransistorTailTemperature (K): 400
+-OxideReadTransistorElementaryCharge (C): 1.602e-19
+-OxideReadTransistorBoltzmannConstant (J/K): 1.380649e-23
+-OxideReadTransistorVacuumPermittivity (F/m): 8.854e-12
+-OxideReadTransistorSemiconductorPermittivity (F/m): 8.854e-11
+-OxideReadTransistorNu0T0: 1.0
+-OxideReadTransistorWidth (m): 200e-9
+-OxideReadTransistorLength (m): 50e-9
+-OxideReadTransistorOverlapCapacitance (F): 30e-18
+-OxideReadTransistorFlatBandVoltage (V): 0.15
+-OxideReadTransistorTrapDensity: 1e17
+-OxideReadTransistorFermiReference: 0.0
+-OxideReadTransistorOxideCapacitance (F/m^2): 0.0371868
+-OxideReadTransistorVRHThreshold (V): -1.5
+-OxideReadTransistorPercolationThreshold (V): -1.0
+-OxideReadTransistorVRHPrefactor (cm^2/Vs): 15.0
+-OxideReadTransistorPercolationPrefactor (cm^2/Vs): 35.0
+-OxideReadTransistorPercolationExponent: 0.3
+-OxideReadTransistorMobility (cm^2/Vs): 20.0
+-OxideReadTransistorMobilityScale: 1.0
+-OxideReadTransistorLeakageSwingFactor: 2.0
+-OxideReadTransistorLeakageSurfacePotentialReference (V): 0.15
+-OxideReadTransistorLeakageScale: 1.0
+-OxideReadTransistorCurrentFloor (A): 1e-17
+-OxideReadTransistorTotalContactResistance (kOhm-um): 0.0
+-OxideReadTransistorOffGateVoltage (V): 0.0
+-OxideReadTransistorOnGateVoltage (V): vdd
+
+-OxideWriteTransistorTemperature (K): 300
+-OxideWriteTransistorTailTemperature (K): 400
+-OxideWriteTransistorElementaryCharge (C): 1.602e-19
+-OxideWriteTransistorBoltzmannConstant (J/K): 1.380649e-23
+-OxideWriteTransistorVacuumPermittivity (F/m): 8.854e-12
+-OxideWriteTransistorSemiconductorPermittivity (F/m): 8.854e-11
+-OxideWriteTransistorNu0T0: 1.0
+-OxideWriteTransistorWidth (m): 100e-9
+-OxideWriteTransistorLength (m): 50e-9
+-OxideWriteTransistorOverlapCapacitance (F): 35e-18
+-OxideWriteTransistorFlatBandVoltage (V): 0.15
+-OxideWriteTransistorTrapDensity: 1e17
+-OxideWriteTransistorFermiReference: 0.0
+-OxideWriteTransistorOxideCapacitance (F/m^2): 0.0371868
+-OxideWriteTransistorVRHThreshold (V): -1.5
+-OxideWriteTransistorPercolationThreshold (V): -1.0
+-OxideWriteTransistorVRHPrefactor (cm^2/Vs): 15.0
+-OxideWriteTransistorPercolationPrefactor (cm^2/Vs): 35.0
+-OxideWriteTransistorPercolationExponent: 0.3
+-OxideWriteTransistorMobility (cm^2/Vs): 25.0
+-OxideWriteTransistorMobilityScale: 1.0
+-OxideWriteTransistorLeakageSwingFactor: 2.0
+-OxideWriteTransistorLeakageSurfacePotentialReference (V): 0.15
+-OxideWriteTransistorLeakageScale: 1.0
+-OxideWriteTransistorCurrentFloor (A): 1e-17
+-OxideWriteTransistorTotalContactResistance (kOhm-um): 0.0
+-OxideWriteTransistorOffGateVoltage (V): 0.0
+-OxideWriteTransistorOnGateVoltage (V): Vdd

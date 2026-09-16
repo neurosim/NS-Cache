@@ -9,13 +9,22 @@
 #include "global.h"
 #include "formula.h"
 
-Mux::Mux() {
-	// TODO Auto-generated constructor stub
-	initialized = false;
-	capForPreviousPowerCalculation = 0;
-	capForPreviousDelayCalculation = 0;
-	capNMOSPassTransistor = 0;
-	resNMOSPassTransistor = 0;
+Mux::Mux()
+	: FunctionUnit(),
+	  initialized(false),
+	  numInput(0),
+	  numMux(0),
+	  capLoad(0),
+	  capInputNextStage(0),
+	  minDriverCurrent(0),
+	  capOutput(0),
+	  widthNMOSPassTransistor(0),
+	  resNMOSPassTransistor(0),
+	  capNMOSPassTransistor(0),
+	  capForPreviousDelayCalculation(0),
+	  capForPreviousPowerCalculation(0),
+	  rampInput(0),
+	  rampOutput(0) {
 }
 
 Mux::~Mux() {
@@ -127,30 +136,4 @@ void Mux::PrintProperty() {
 	FunctionUnit::PrintProperty();
 }
 
-Mux & Mux::operator=(const Mux &rhs) {
-	//cout << "[PROGRESS] Line 131 :: Mux.cc" << endl;
-	height = rhs.height;
-	width = rhs.width;
-	area = rhs.area;
-	readLatency = rhs.readLatency;
-	writeLatency = rhs.writeLatency;
-	readDynamicEnergy = rhs.readDynamicEnergy;
-	writeDynamicEnergy = rhs.writeDynamicEnergy;
-	leakage = rhs.leakage;
-	initialized = rhs.initialized;
-	numInput = rhs.numInput;
-	numMux = rhs.numMux;
-	capLoad = rhs.capLoad;
-	capInputNextStage = rhs.capInputNextStage;
-	minDriverCurrent = rhs.minDriverCurrent;
-    capOutput = rhs.capOutput;
-	widthNMOSPassTransistor = rhs.widthNMOSPassTransistor;
-	resNMOSPassTransistor = rhs.resNMOSPassTransistor;
-	capNMOSPassTransistor = rhs.capNMOSPassTransistor;
-	capForPreviousDelayCalculation = rhs.capForPreviousDelayCalculation;
-	capForPreviousPowerCalculation = rhs.capForPreviousPowerCalculation;
-	rampInput = rhs.rampInput;
-	rampOutput = rhs.rampOutput;
-
-	return *this;
-}
+Mux & Mux::operator=(const Mux &rhs) = default;

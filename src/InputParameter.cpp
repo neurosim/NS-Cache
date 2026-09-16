@@ -20,9 +20,114 @@
 #include "InputParameter.h"
 #include "global.h"
 #include "constant.h"
+#include <cerrno>
+#include <cctype>
+#include <cmath>
+#include <limits>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+namespace {
+
+void ConfigError(FILE *fp, const std::string & inputFile, const char *option,
+		const char *expectation) {
+	if (fp)
+		fclose(fp);
+	cout << "Invalid " << option << " in " << inputFile << ". Expected "
+			<< expectation << "." << endl;
+	exit(-1);
+}
+
+void SkipWhitespace(const char *&cursor) {
+	while (*cursor && isspace(static_cast<unsigned char>(*cursor)))
+		cursor++;
+}
+
+bool ExtractStrictValue(const char *line, const char *option, std::string *value) {
+	const size_t optionLength = strlen(option);
+	if (strncmp(line, option, optionLength) != 0)
+		return false;
+	const char *cursor = line + optionLength;
+	SkipWhitespace(cursor);
+	if (*cursor != ':')
+		return false;
+	cursor++;
+	SkipWhitespace(cursor);
+	const char *end = cursor + strlen(cursor);
+	while (end > cursor && isspace(static_cast<unsigned char>(end[-1])))
+		end--;
+	if (end == cursor)
+		return false;
+	value->assign(cursor, end);
+	return true;
+}
+
+bool ParseStrictBool(const std::string & value, bool *result) {
+	std::string normalized;
+	for (size_t i = 0; i < value.size(); i++)
+		normalized += static_cast<char>(tolower(static_cast<unsigned char>(value[i])));
+	if (normalized == "yes" || normalized == "true" || normalized == "1") {
+		*result = true;
+		return true;
+	}
+	if (normalized == "no" || normalized == "false" || normalized == "0") {
+		*result = false;
+		return true;
+	}
+	return false;
+}
+
+bool ParseStrictDouble(const std::string & value, double *result) {
+	errno = 0;
+	char *end = NULL;
+	const char *start = value.c_str();
+	double parsed = strtod(start, &end);
+	if (errno == ERANGE || end == start || *end != '\0' || !std::isfinite(parsed))
+		return false;
+	*result = parsed;
+	return true;
+}
+
+bool ParseUnsignedToken(const char *&cursor, uint64_t *result) {
+	SkipWhitespace(cursor);
+	if (!isdigit(static_cast<unsigned char>(*cursor)))
+		return false;
+	uint64_t parsed = 0;
+	while (isdigit(static_cast<unsigned char>(*cursor))) {
+		unsigned int digit = static_cast<unsigned int>(*cursor - '0');
+		if (parsed > (std::numeric_limits<uint64_t>::max() - digit) / 10)
+			return false;
+		parsed = parsed * 10 + digit;
+		cursor++;
+	}
+	*result = parsed;
+	return true;
+}
+
+bool ParseStrictPositiveUint64(const std::string & value, uint64_t *result) {
+	const char *cursor = value.c_str();
+	if (!ParseUnsignedToken(cursor, result))
+		return false;
+	SkipWhitespace(cursor);
+	return *cursor == '\0' && *result > 0;
+}
+
+bool ParseStrictMatSize(const std::string & value, uint64_t *rows, uint64_t *columns) {
+	const char *cursor = value.c_str();
+	if (!ParseUnsignedToken(cursor, rows) || *rows == 0)
+		return false;
+	SkipWhitespace(cursor);
+	if (*cursor != 'x' && *cursor != 'X')
+		return false;
+	cursor++;
+	if (!ParseUnsignedToken(cursor, columns) || *columns == 0)
+		return false;
+	SkipWhitespace(cursor);
+	return *cursor == '\0';
+}
+
+} // namespace
 
 InputParameter::InputParameter() {
 	// TODO Auto-generated constructor stub
@@ -75,6 +180,11 @@ InputParameter::InputParameter() {
 	maxIsGlobalWireLowSwing = true;
 	/* relaxSRAMCell = true; */
 	relaxSRAMCell = true;
+	bankAspectRatioLimit = CONSTRAINT_ASPECT_RATIO_BANK;
+	forceMatSize = false;
+	forcedMatRows = 0;
+	forcedMatColumns = 0;
+	dramTargetResidualRatio = 0.10;
 	delaytolerance = 0.1;
 	numRepeaters = 0;
 	bufferSizeRatio = 1.0;
@@ -116,6 +226,7 @@ InputParameter::InputParameter() {
 
     monolithicStackCount = 1;
 	maxMatLayers = 4;
+	matLayerSet = maxMatLayers;
 
     fileMemCell.clear();
 
@@ -218,6 +329,20 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 		}
 		if (!strncmp("-WordWidth", line, strlen("-WordWidth"))) {
 			sscanf(line, "-WordWidth (bit): %ld", &wordWidth);
+			continue;
+		}
+		if (!strncmp("-ForceMatSize", line, strlen("-ForceMatSize"))) {
+			std::string value;
+			uint64_t rows = 0;
+			uint64_t columns = 0;
+			if (!ExtractStrictValue(line, "-ForceMatSize (Rows x Columns)", &value)
+					|| !ParseStrictMatSize(value, &rows, &columns)) {
+				ConfigError(fp, inputFile, "-ForceMatSize",
+						"positive integer dimensions formatted as '<rows> x <columns>'");
+			}
+			forceMatSize = true;
+			forcedMatRows = rows;
+			forcedMatColumns = columns;
 			continue;
 		}
 		if (!strncmp("-Associativity", line, strlen("-Associativity"))) {
@@ -423,6 +548,16 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 			continue;
 		}
 
+		if (!strncmp("-RelaxSRAMCell", line, strlen("-RelaxSRAMCell"))) {
+			std::string value;
+			if (!ExtractStrictValue(line, "-RelaxSRAMCell", &value)
+					|| !ParseStrictBool(value, &relaxSRAMCell)) {
+				ConfigError(fp, inputFile, "-RelaxSRAMCell",
+						"yes/no, true/false, or 1/0");
+			}
+			continue;
+		}
+
 		if (!strncmp("-MemoryCellInputFile", line, strlen("-MemoryCellInputFile"))) {
 			sscanf(line, "-MemoryCellInputFile: %s", tmp);
 			fileMemCell.push_back(string(tmp));
@@ -431,6 +566,28 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 
 		if (!strncmp("-MaxNmosSize", line, strlen("-MaxNmosSize"))) {
 			sscanf(line, "-MaxNmosSize (F): %lf", &maxNmosSize);
+			continue;
+		}
+
+		if (!strncmp("-BankAspectRatioLimit", line, strlen("-BankAspectRatioLimit"))) {
+			std::string value;
+			if (!ExtractStrictValue(line, "-BankAspectRatioLimit", &value)
+					|| !ParseStrictDouble(value, &bankAspectRatioLimit)
+					|| (bankAspectRatioLimit != 0 && bankAspectRatioLimit < 1)) {
+				ConfigError(fp, inputFile, "-BankAspectRatioLimit",
+						"zero to disable the check, or a finite value greater than or equal to 1");
+			}
+			continue;
+		}
+
+		if (!strncmp("-DRAMTargetResidualRatio", line, strlen("-DRAMTargetResidualRatio"))) {
+			std::string value;
+			if (!ExtractStrictValue(line, "-DRAMTargetResidualRatio", &value)
+					|| !ParseStrictDouble(value, &dramTargetResidualRatio)
+					|| dramTargetResidualRatio <= 0 || dramTargetResidualRatio >= 1) {
+				ConfigError(fp, inputFile, "-DRAMTargetResidualRatio",
+						"a finite value strictly between 0 and 1");
+			}
 			continue;
 		}
 
@@ -472,7 +629,16 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 		}
 
 		if (!strncmp("-LimitMonolithicTier", line, strlen("-LimitMonolithicTier"))) {
-			sscanf(line, "-LimitMonolithicTier (N): %d", &matLayerSet);
+			std::string value;
+			uint64_t parsed = 0;
+			if (!ExtractStrictValue(line, "-LimitMonolithicTier (N)", &value)
+					|| !ParseStrictPositiveUint64(value, &parsed)
+					|| parsed > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+				ConfigError(fp, inputFile, "-LimitMonolithicTier",
+						"a positive integer within the supported range");
+			}
+			/* Historical searches use powers of two, but this value is an exact ceiling. */
+			matLayerSet = static_cast<int>(parsed);
 			maxMatLayers = matLayerSet;
 			continue;
 		}
@@ -647,8 +813,12 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 		}
 
 		if (!strncmp("-M3DMemory", line, strlen("-M3DMemory"))) {
-			sscanf(line, "-M3DMemory: %s", tmp);
-			monolithic3DMat = true;
+			std::string value;
+			if (!ExtractStrictValue(line, "-M3DMemory", &value)
+					|| !ParseStrictBool(value, &monolithic3DMat)) {
+				ConfigError(fp, inputFile, "-M3DMemory",
+						"yes/no, true/false, or 1/0");
+			}
 			continue;
 		}
 
@@ -711,6 +881,28 @@ void InputParameter::ReadInputParameterFromFile(const std::string & inputFile) {
 	}
 
 	fclose(fp);
+	ValidateInputParameter(inputFile);
+}
+
+void InputParameter::ValidateInputParameter(const std::string & inputFile) const {
+	if (!std::isfinite(bankAspectRatioLimit)
+			|| (bankAspectRatioLimit != 0 && bankAspectRatioLimit < 1)) {
+		ConfigError(NULL, inputFile, "-BankAspectRatioLimit",
+				"zero to disable the check, or a finite value greater than or equal to 1");
+	}
+	if (forceMatSize && (forcedMatRows == 0 || forcedMatColumns == 0)) {
+		ConfigError(NULL, inputFile, "-ForceMatSize",
+				"positive integer dimensions formatted as '<rows> x <columns>'");
+	}
+	if (!std::isfinite(dramTargetResidualRatio)
+			|| dramTargetResidualRatio <= 0 || dramTargetResidualRatio >= 1) {
+		ConfigError(NULL, inputFile, "-DRAMTargetResidualRatio",
+				"a finite value strictly between 0 and 1");
+	}
+	if (maxMatLayers <= 0) {
+		ConfigError(NULL, inputFile, "-LimitMonolithicTier",
+				"a positive integer within the supported range");
+	}
 }
 
 void InputParameter::PrintInputParameter() {
@@ -749,6 +941,20 @@ void InputParameter::PrintInputParameter() {
 		cout << "Page Size  : " << pageSize / 8 << "Bytes" << endl;
 		cout << "Block Size : " << flashBlockSize / 8 / 1024 << "KB" << endl;
 	}
+	cout << "Relax SRAM Cell: " << (relaxSRAMCell ? "Enabled" : "Disabled") << endl;
+	cout << "Bank Aspect Ratio Limit: ";
+	if (bankAspectRatioLimit == 0)
+		cout << "Disabled" << endl;
+	else
+		cout << bankAspectRatioLimit << endl;
+	cout << "Forced Data MAT Size: ";
+	if (forceMatSize)
+		cout << forcedMatRows << " Rows x " << forcedMatColumns << " Columns" << endl;
+	else
+		cout << "Disabled" << endl;
+	cout << "DRAM Target Residual Ratio: " << dramTargetResidualRatio << endl;
+	cout << "Monolithic 3D MAT: " << (monolithic3DMat ? "Enabled" : "Disabled") << endl;
+	cout << "Monolithic MAT Tier Limit: " << maxMatLayers << endl;
 	// TO-DO: tedious work here!!!
 
 	if (optimizationTarget == full_exploration) {

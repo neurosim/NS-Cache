@@ -211,17 +211,25 @@ int main(int argc, char *argv[])
     Result **bestDataResults = new Result * [numCellTypes];
     Result **bestTagResults = new Result * [numCellTypes];
 
+    /* Parse and validate every requested cell before exploring any design.
+     * In particular, a malformed AOS cell later in a multi-cell sweep must not
+     * fail only after earlier technologies have already been explored. */
+    for (int cellIdx = 0; cellIdx < numCellTypes; cellIdx++) {
+        sweepCells[cellIdx] = new MemCell();
+        cell = sweepCells[cellIdx];
+        cell->ReadCellFromFile(inputParameter->fileMemCell[cellIdx]);
+        cell->ApplyPVT();
+    }
+
     int failures = 0;
     long long totalSolutions = 0;
     for (int cellIdx = 0; cellIdx < numCellTypes; cellIdx++) {
         long long solutions = 0;
-        sweepCells[cellIdx] = new MemCell();
-        sweepCells[cellIdx]->ReadCellFromFile(inputParameter->fileMemCell[cellIdx]);
-        sweepCells[cellIdx]->ApplyPVT();
     //	cell->CellScaling(inputParameter->processNode);
         cell = sweepCells[cellIdx];
 
-        /* In most cases device technology is the same as the peripheral technology. */
+        /* Standalone DRAM uses the selected peripheral device roadmap.  eDRAM
+         * alone has a dedicated embedded-access-device table in Technology. */
         devtech = tech;
 
         if (cell->memCellType == eDRAM) {
@@ -541,7 +549,6 @@ int nvsim(ofstream& outputFile, string inputFileName, long long& numSolution, Re
 			numSolution++;
 			UPDATE_BEST_DATA;
 			// tempResult.printToCsvFile(outputFile);
-//			tempResult.printAsCacheToFile(inputParameter->cacheAccessMode, "tempResult"+ std::to_string(numSolution)+".nsd");
 			if (inputParameter->optimizationTarget == full_exploration && !inputParameter->isPruningEnabled) {
 				OUTPUT_TO_FILE;
 			}
@@ -711,10 +718,6 @@ void applyConstraint() {
 	/* Check functions that are not yet implemented */
 	if (inputParameter->designTarget == CAM_chip) {
 		cout << "[ERROR] CAM model is still under development" << endl;
-		exit(-1);
-	}
-	if (cell->memCellType == DRAM) {
-		cout << "[ERROR] DRAM model is still under development" << endl;
 		exit(-1);
 	}
 	if (cell->memCellType == MLCNAND) {

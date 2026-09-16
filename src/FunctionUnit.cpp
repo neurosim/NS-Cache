@@ -11,19 +11,26 @@
 
 #include <cassert>
 
-FunctionUnit::FunctionUnit() {
-	height = width = 0;
-	area = 0;
-	readLatency = writeLatency = 0;
-	readDynamicEnergy = writeDynamicEnergy = 0;
-	leakage = 0;
-
-	resetLatency = setLatency = 0;
-  refreshLatency = 0;
-	resetDynamicEnergy = setDynamicEnergy = 0;
-  refreshDynamicEnergy = 0;
-	cellReadEnergy = 0;
-	cellSetEnergy = cellResetEnergy = 0;
+FunctionUnit::FunctionUnit()
+	: height(0),
+	  width(0),
+	  newHeight(0),
+	  newWidth(0),
+	  area(0),
+	  readLatency(0),
+	  writeLatency(0),
+	  readDynamicEnergy(0),
+	  writeDynamicEnergy(0),
+	  leakage(0),
+	  setLatency(0),
+	  resetLatency(0),
+	  refreshLatency(0),
+	  setDynamicEnergy(0),
+	  resetDynamicEnergy(0),
+	  cellReadEnergy(0),
+	  cellSetEnergy(0),
+	  cellResetEnergy(0),
+	  refreshDynamicEnergy(0) {
 }
 
 FunctionUnit::~FunctionUnit() {
@@ -111,4 +118,3 @@ void FunctionUnit::OverrideLayout() {
 	}
 	area = height * width;
 }
-

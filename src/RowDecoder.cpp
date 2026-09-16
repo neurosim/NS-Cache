@@ -10,10 +10,25 @@
 #include "formula.h"
 #include "global.h"
 
-RowDecoder::RowDecoder() : FunctionUnit(){
-	// TODO Auto-generated constructor stub
-	initialized = false;
-	invalid = false;
+RowDecoder::RowDecoder()
+	: FunctionUnit(),
+	  initialized(false),
+	  invalid(false),
+	  outputDriver(),
+	  numRow(0),
+	  multipleRowPerSet(false),
+	  numNandInput(0),
+	  capLoad(0),
+	  resLoad(0),
+	  areaOptimizationLevel(latency_first),
+	  minDriverCurrent(0),
+	  widthNandN(0),
+	  widthNandP(0),
+	  capNandInput(0),
+	  capNandOutput(0),
+	  rampInput(0),
+	  rampOutput(0),
+	  wireLength(0) {
 }
 
 RowDecoder::~RowDecoder() {
@@ -180,41 +195,4 @@ void RowDecoder::PrintProperty() {
 	FunctionUnit::PrintProperty();
 }
 
-RowDecoder & RowDecoder::operator=(const RowDecoder &rhs) {
-	//cout << "[PROGRESS] Line 184 :: RowDecoder.cc" << endl;
-	height = rhs.height;
-	width = rhs.width;
-	area = rhs.area;
-	readLatency = rhs.readLatency;
-	writeLatency = rhs.writeLatency;
-	readDynamicEnergy = rhs.readDynamicEnergy;
-	writeDynamicEnergy = rhs.writeDynamicEnergy;
-	resetLatency = rhs.resetLatency;
-	setLatency = rhs.setLatency;
-	resetDynamicEnergy = rhs.resetDynamicEnergy;
-	setDynamicEnergy = rhs.setDynamicEnergy;
-	cellReadEnergy = rhs.cellReadEnergy;
-	cellSetEnergy = rhs.cellSetEnergy;
-	cellResetEnergy = rhs.cellResetEnergy;
-	leakage = rhs.leakage;
-	initialized = rhs.initialized;
-	invalid = rhs.invalid;
-	outputDriver = rhs.outputDriver;
-
-	numRow = rhs.numRow;
-	multipleRowPerSet = rhs.multipleRowPerSet;
-	numNandInput = rhs.numNandInput;
-	capLoad = rhs.capLoad;
-	resLoad = rhs.resLoad;
-	areaOptimizationLevel = rhs.areaOptimizationLevel;
-	minDriverCurrent = rhs.minDriverCurrent;
-
-	widthNandN = rhs.widthNandN;
-	widthNandP = rhs.widthNandP;
-	capNandInput = rhs.capNandInput;
-	capNandOutput = rhs.capNandOutput;
-	rampInput = rhs.rampInput;
-	rampOutput = rhs.rampOutput;
-
-	return *this;
-}
+RowDecoder & RowDecoder::operator=(const RowDecoder &rhs) = default;

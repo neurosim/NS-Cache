@@ -21,10 +21,15 @@
 #include "formula.h"
 #include "global.h"
 
-SenseAmp::SenseAmp() {
-	// TODO Auto-generated constructor stub
-	initialized = false;
-	invalid = false;
+SenseAmp::SenseAmp()
+	: FunctionUnit(),
+	  initialized(false),
+	  invalid(false),
+	  numColumn(0),
+	  currentSense(false),
+	  senseVoltage(0),
+	  capLoad(0),
+	  pitchSenseAmp(0) {
 }
 
 SenseAmp::~SenseAmp() {
@@ -226,32 +231,4 @@ void SenseAmp::PrintProperty() {
 	FunctionUnit::PrintProperty();
 }
 
-SenseAmp & SenseAmp::operator=(const SenseAmp &rhs) {
-	//cout << "[PROGRESS] Line 184 :: SenseAmp.cc" << endl;
-	height = rhs.height;
-	width = rhs.width;
-	area = rhs.area;
-	readLatency = rhs.readLatency;
-	writeLatency = rhs.writeLatency;
-    refreshLatency = rhs.refreshLatency;
-	readDynamicEnergy = rhs.readDynamicEnergy;
-	writeDynamicEnergy = rhs.writeDynamicEnergy;
-    refreshDynamicEnergy = rhs.refreshDynamicEnergy;
-	resetLatency = rhs.resetLatency;
-	setLatency = rhs.setLatency;
-	resetDynamicEnergy = rhs.resetDynamicEnergy;
-	setDynamicEnergy = rhs.setDynamicEnergy;
-	cellReadEnergy = rhs.cellReadEnergy;
-	cellSetEnergy = rhs.cellSetEnergy;
-	cellResetEnergy = rhs.cellResetEnergy;
-	leakage = rhs.leakage;
-	initialized = rhs.initialized;
-	invalid = rhs.invalid;
-	numColumn = rhs.numColumn;
-	currentSense = rhs.currentSense;
-	senseVoltage = rhs.senseVoltage;
-	capLoad = rhs.capLoad;
-	pitchSenseAmp = rhs.pitchSenseAmp;
-
-	return *this;
-}
+SenseAmp & SenseAmp::operator=(const SenseAmp &rhs) = default;

@@ -25,9 +25,29 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "AOSFETCompactModel.h"
 #include "typedef.h"
 
 using namespace std;
+
+struct OxideTransistorParameterSet {
+	bool initialized;
+	bool temperatureSpecified;
+	bool widthSpecified;
+	bool lengthSpecified;
+	bool overlapCapacitanceSpecified;
+	bool mobilitySpecified;
+	bool mobilityScaleSpecified;
+	bool leakageScaleSpecified;
+	bool flatBandVoltageSpecified;
+	bool contactResistanceSpecified;
+	bool wordlineBoostVoltageSpecified;
+	bool wordlineHoldVoltageSpecified;
+	double wordlineBoostVoltage;
+	double wordlineHoldVoltage;
+	AOSFETCompactModel::Parameters parameters;
+	AOSDeviceOperatingPoint operatingPoint;
+};
 
 class MemCell {
 public:
@@ -82,6 +102,10 @@ public:
 	double capDRAMCell;		/* The DRAM cell capacitance if the memory cell is DRAM, Unit: F */
 	double widthSRAMCellNMOS;	/* The gate width of NMOS in SRAM cells, Unit: F */
 	double widthSRAMCellPMOS;	/* The gate width of PMOS in SRAM cells, Unit: F */
+	bool oxideTransistor;		/* Use the AOS compact transistor model. */
+	OxideTransistorParameterSet oxideAccessTransistor;	/* eDRAM access path */
+	OxideTransistorParameterSet oxideReadTransistor;	/* gcDRAM read path */
+	OxideTransistorParameterSet oxideWriteTransistor;	/* gcDRAM write path */
 
 	/* For memristor */
 	bool readFloating;      /* If unselected wordlines/bitlines are floating to reduce total leakage */
@@ -106,6 +130,9 @@ public:
     /* For eDRAM. */
     double retentionTime;           /* Cell time to data loss (us) */
     double temperature;             /* Temperature for which the cell input values are valid. */
+	bool retentionAOSOffCurrentRatio;
+	bool retentionReferenceHoldVoltageSpecified;
+	double retentionReferenceHoldVoltage;
 };
 
 #endif /* MEMCELL_H_ */

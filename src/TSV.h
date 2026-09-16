@@ -21,7 +21,7 @@ public:
     ~TSV();
     TSV& operator=(const TSV&);
 
-    void Initialize(TSV_type tsv_type, bool buffered = false);
+    void Initialize(TSV_type requestedType, bool buffered = false);
     void CalculateArea();
     void CalculateLatencyAndPower(double _rampInputRead, double _rampInputWrite);
 

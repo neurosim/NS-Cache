@@ -32,8 +32,9 @@ public:
 	/* Functions */
 	void print(int indent = 0);
 	void printToFile(int indent = 0, const string &FileName = "out.txt");
+	void printToStream(int indent, ostream &outFile);
 	void printAsCache(Result &tagBank, CacheAccessMode cacheAccessMode);
-	void printAsCacheToFile(CacheAccessMode cacheAccessMode, const string &FileName);
+	void printAsCacheToFile(Result &tagBank, CacheAccessMode cacheAccessMode, const string &FileName);
 	void reset();
     bool nearReference(double reference, double measured);
 	void printToCsvFile(ofstream &outputFile);

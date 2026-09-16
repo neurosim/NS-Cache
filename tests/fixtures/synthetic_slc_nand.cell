@@ -1,0 +1,14 @@
+# Synthetic regression fixture; not a calibrated production NAND cell.
+-MemCellType: SLCNAND
+-ProcessNode: 45
+-CellArea (F^2): 4
+-CellAspectRatio: 1
+-ReadMode: voltage
+-ReadVoltage (V): 0.5
+-MinSenseVoltage (mV): 50
+-FlashEraseVoltage (V): 10
+-FlashProgramVoltage (V): 12
+-FlashPassVoltage (V): 5
+-FlashEraseTime (ms): 1
+-FlashProgramTime (us): 100
+-GateCouplingRatio: 0.7

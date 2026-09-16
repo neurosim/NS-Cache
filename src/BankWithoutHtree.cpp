@@ -186,6 +186,11 @@ void BankWithoutHtree::Initialize(int _numRowSubArray, int _numColumnSubArray, l
 	}
 
 	subarray.CalculateArea();
+	if (subarray.invalid) {
+		invalid = true;
+		initialized = true;
+		return;
+	}
 
 	if (!internalSenseAmp) {
 		bool voltageSense = true;
@@ -267,9 +272,12 @@ void BankWithoutHtree::CalculateArea() {
 			}
 		}
 
-		/* Determine if the aspect ratio meets the constraint */
+		/* This was historically a fixed ratio of three.  Keep that default,
+		 * but use the validated common control for both bank routers. */
 		if (memoryType == MemoryType::data)
-			if (height / width > CONSTRAINT_ASPECT_RATIO_BANK || width / height > CONSTRAINT_ASPECT_RATIO_BANK) {
+			if (inputParameter->bankAspectRatioLimit > 0
+					&& (height / width > inputParameter->bankAspectRatioLimit
+							|| width / height > inputParameter->bankAspectRatioLimit)) {
 				/* illegal */
 				invalid = true;
 				height = width = area = invalid_value;
@@ -329,7 +337,19 @@ void BankWithoutHtree::CalculateLatencyAndPower() {
 		double leakageWire = 0;
 
 		subarray.CalculateLatency(infinite_ramp);
+		if (subarray.invalid) {
+			invalid = true;
+			readLatency = writeLatency = refreshLatency = invalid_value;
+			readDynamicEnergy = writeDynamicEnergy = refreshDynamicEnergy = leakage = invalid_value;
+			return;
+		}
 		subarray.CalculatePower();
+		if (subarray.invalid) {
+			invalid = true;
+			readLatency = writeLatency = refreshLatency = invalid_value;
+			readDynamicEnergy = writeDynamicEnergy = refreshDynamicEnergy = leakage = invalid_value;
+			return;
+		}
 		readLatency = resetLatency = setLatency = writeLatency = 0;
         refreshLatency = subarray.refreshLatency * numColumnSubArray; // TOTAL refresh time for all SubArrays
 		readDynamicEnergy = writeDynamicEnergy = resetDynamicEnergy = setDynamicEnergy = 0;
@@ -549,7 +569,7 @@ void BankWithoutHtree::CalculateLatencyAndPower() {
         leakage += tsvArray.numTotalBits * (stackedDieCount-1) * tsvArray.leakage;
     }
 
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+    if (cell->memCellType == DRAM || cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
         if (refreshLatency > cell->retentionTime) {
             invalid = true;
         }
@@ -563,4 +583,3 @@ BankWithoutHtree & BankWithoutHtree::operator=(const BankWithoutHtree &rhs) {
 	numDataBitRouteToSubArray = rhs.numDataBitRouteToSubArray;
 	return *this;
 }
-

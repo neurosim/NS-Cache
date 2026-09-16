@@ -22,11 +22,39 @@
 #include "global.h"
 #include "constant.h"
 #include <math.h>
+#include <cmath>
+#include <cstdint>
+#include <initializer_list>
+#include <limits>
+
+namespace {
+
+bool IsFinitePositive(double value) {
+	return std::isfinite(value) && value > 0;
+}
+
+bool IsFiniteNonNegative(double value) {
+	return std::isfinite(value) && value >= 0;
+}
+
+bool AreFiniteNonNegative(std::initializer_list<double> values) {
+	for (double value : values) {
+		if (!IsFiniteNonNegative(value))
+			return false;
+	}
+	return true;
+}
+
+double ExactSettlingDelay(double settlingTime, double rampInput, double *rampOutput) {
+	/* horowitz(beta=0) returns ln(2) * tr.  Normalize tr so a requested
+	 * exponential-settling time remains exactly RC*ln(initial/residual). */
+	static const double horowitzThresholdFactor = std::fabs(std::log(0.5));
+	return horowitz(settlingTime / horowitzThresholdFactor, 0, rampInput, rampOutput);
+}
+
+}
 
 Mat::Mat() {
-	// TODO Auto-generated constructor stub
-	initialized = false;
-	invalid = false;
 }
 
 Mat::~Mat() {
@@ -49,11 +77,35 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 	internalSenseAmp = _internalSenseAmp;
 	areaOptimizationLevel = _areaOptimizationLevel;
     num3DLevels = _num3DLevels;
+	invalid = false;
+	voltagePrecharge = tech->vdd;
+	dramTiming = DRAMTimingResult();
+	gcDramPower = GcDRAMPowerResult();
+	m3d = M3DLayoutResult();
+	aosLeakageUpperBound = 0;
+	aosAccessOperatingPoint = AOSDeviceOperatingPoint{};
+	aosReadOperatingPoint = AOSDeviceOperatingPoint{};
+	aosWriteOperatingPoint = AOSDeviceOperatingPoint{};
+	stackedMemTiers = 1;
+
+	if (numRow <= 0 || numColumn <= 0 || muxSenseAmp <= 0 || muxOutputLev1 <= 0
+			|| muxOutputLev2 <= 0 || num3DLevels <= 0) {
+		cout << "[Mat] Error: Row, column, mux, and level counts must be positive." << endl;
+		invalid = true;
+		initialized = true;
+		return;
+	}
+	if (cell->memCellType == MLCNAND) {
+		cout << "[Mat] Error: MLC NAND modeling is unfinished and is not a valid exploration path." << endl;
+		invalid = true;
+		initialized = true;
+		return;
+	}
 
 	double maxWordlineCurrent = 0;
 	double maxBitlineCurrent = 0;
 	
-	activityRowRead = activityRowWrite = 1/numRow;
+	activityRowRead = activityRowWrite = 1.0 / static_cast<double>(numRow);
 
 	/* Check if the configuration is legal */
 	if (inputParameter->designTarget == cache && inputParameter->cacheAccessMode != sequential_access_mode) {
@@ -179,7 +231,9 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 		}
 	} else if (cell->memCellType == DRAM || cell->memCellType == eDRAM || cell->memCellType == gcDRAM) { /* Write Access Destruction */
 		cout << "[Mat] Error: DRAM does not support external sense amplifiers!" << endl;
-		exit(-1);
+		invalid = true;
+		initialized = true;
+		return;
 	}
 
 	double MIN_CELL_HEIGHT = MAX_TRANSISTOR_HEIGHT;  //set real layout cell height
@@ -235,7 +289,14 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 	} else {
 		lenWordline = (double)numColumn * cell->widthInFeatureSize * tech->featureSize;
 		lenBitline = (double)numRow * cell->heightInFeatureSize * tech->featureSize;
-		if(cell->memCellType == gcDRAM) lenBitline = ((double)(numRow+2) * cell->heightInFeatureSize * tech->featureSize)/2; //Add Reference on Both Ends
+		if (cell->memCellType == gcDRAM) {
+			/* The older non-relaxed layout assumed a half-row gcDRAM body. AOS
+			 * devices use the full matched logical row body; CMOS retains the
+			 * characterized half-row geometry. */
+			const double rowBodyScale = cell->oxideTransistor ? 1.0 : 0.5;
+			lenBitline = (double)(numRow + 2) * cell->heightInFeatureSize
+					* tech->featureSize * rowBodyScale;
+		}
 	}
 	/* Add stitching overhead if necessary */
 	if (cell->stitching) {
@@ -267,12 +328,8 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 		//cout << "resMuxLoad: " << resMuxLoad * 1e9 << endl;
 
 	if (cell->memCellType == DRAM || cell->memCellType == eDRAM) {
-		senseVoltage = devtech->vdd / 2 * cell->capDRAMCell / (cell->capDRAMCell + capBitline);
-		if (senseVoltage < cell->minSenseVoltage) {		/* Bitline is too long */
-			invalid = true;
-			initialized = true;
-			return;
-		}
+		/* Charge sharing is evaluated after the access-device drain load is added. */
+		senseVoltage = 0;
 	} else if (cell->memCellType == gcDRAM) {
 		senseVoltage = cell->minSenseVoltage;
 		/*The read access transistor for the gcDRAM is not destructive and not limited by the charges on the cap*/
@@ -297,28 +354,72 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 		voltagePrecharge = tech->vdd / 2;	/* SRAM read voltage is always half of vdd */
 	} else if (cell->memCellType == DRAM || cell->memCellType == eDRAM) {
 		/* DRAM and eDRAM only has one access transistors */
-		resCellAccess = CalculateOnResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, inputParameter->temperature, *devtech);
-		capCellAccess = CalculateDrainCap(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, cell->widthInFeatureSize * devtech->featureSize, *devtech);
-		capWordline += CalculateGateCap(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, *devtech) * numColumn;
-		if(tech->featureSize <= 14 * 1e-9){ capBitline += tech->cap_draintotal * cell->widthAccessCMOS * tech->effective_width * numRow / 2;}
-		else {capBitline  += capCellAccess * numRow / 2;	/* Due to shared contact */}
+		if (cell->memCellType == eDRAM && cell->oxideTransistor) {
+			/* Cell-file preflight evaluates the configured bias once; each MAT
+			 * keeps its own copy so all electrical loads and diagnostics share
+			 * exactly the same operating point. */
+			aosAccessOperatingPoint = cell->oxideAccessTransistor.operatingPoint;
+			resCellAccess = aosAccessOperatingPoint.Ron;
+			resCellAccessOff = aosAccessOperatingPoint.Roff;
+			capCellAccess = aosAccessOperatingPoint.Cdrain;
+			capWordline += aosAccessOperatingPoint.Cgate * numColumn;
+			capBitline += capCellAccess * numRow / 2;
+		} else {
+			resCellAccess = CalculateOnResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, inputParameter->temperature, *devtech);
+			resCellAccessOff = CalculateOffResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, inputParameter->temperature, *devtech);
+			capCellAccess = CalculateDrainCap(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, cell->widthInFeatureSize * devtech->featureSize, *devtech);
+			capWordline += CalculateGateCap(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, *devtech) * numColumn;
+			if(tech->featureSize <= 14 * 1e-9){ capBitline += tech->cap_draintotal * cell->widthAccessCMOS * tech->effective_width * numRow / 2;}
+			else {capBitline  += capCellAccess * numRow / 2;	/* Due to shared contact */}
+		}
 		voltagePrecharge = devtech->vdd / 2;	/* DRAM read voltage is always half of vdd */
 	} else if(cell->memCellType == gcDRAM) {
 		// Gain Cell has Split Read and Write Paths, with different connectivity than eDRAM
 		capWordlineRead = capWordline;
 		capBitlineRead = capBitline;
-		resCellAccess = CalculateOnResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, inputParameter->temperature, *devtech);
-		capCellAccess = CalculateDrainCap(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, cell->widthInFeatureSize * devtech->featureSize, *devtech);
-		capWordline += CalculateGateCap(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, *devtech) * numColumn;
-		capWordlineRead += capCellAccess * numColumn / 2; // Shared Contact on RWL
-		if(tech->featureSize <= 14 * 1e-9){ capBitline += tech->cap_draintotal * cell->widthAccessCMOS * tech->effective_width * numRow / 2;}
-		else {capBitline  += capCellAccess * numRow / 2;	/* Due to shared contact */}
-		if(tech->featureSize <= 14 * 1e-9){ capBitlineRead += tech->cap_draintotal * cell->widthAccessCMOS * tech->effective_width * numRow;}
-		else {capBitlineRead  += capCellAccess * numRow;	/* Keep RBL unshared, sneak path in voltage mode */}
+		if (cell->oxideTransistor) {
+			aosReadOperatingPoint = cell->oxideReadTransistor.operatingPoint;
+			aosWriteOperatingPoint = cell->oxideWriteTransistor.operatingPoint;
+			resReadCellAccess = aosReadOperatingPoint.Ron;
+			resReadCellAccessOff = aosReadOperatingPoint.Roff;
+			capReadCellAccess = aosReadOperatingPoint.Cdrain;
+			capReadCellGate = aosReadOperatingPoint.Cgate;
+			resWriteCellAccess = aosWriteOperatingPoint.Ron;
+			resWriteCellAccessOff = aosWriteOperatingPoint.Roff;
+			capWriteCellAccess = aosWriteOperatingPoint.Cdrain;
+			capWriteCellGate = aosWriteOperatingPoint.Cgate;
+			capWordline += capWriteCellGate * numColumn;
+			/* The read transistor gate is the storage node, not the RWL.  Keep
+			 * the historical shared read-device diffusion load on the RWL. */
+			capWordlineRead += capReadCellAccess * numColumn / 2;
+			capBitline += capWriteCellAccess * numRow / 2;
+			capBitlineRead += capReadCellAccess * numRow;
+		} else {
+			resCellAccess = CalculateOnResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, inputParameter->temperature, *devtech);
+			resCellAccessOff = CalculateOffResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, inputParameter->temperature, *devtech);
+			capCellAccess = CalculateDrainCap(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, NMOS, cell->widthInFeatureSize * devtech->featureSize, *devtech);
+			capReadCellGate = capWriteCellGate = CalculateGateCap(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * devtech->featureSize, *devtech);
+			resReadCellAccess = resWriteCellAccess = resCellAccess;
+			resReadCellAccessOff = resWriteCellAccessOff = resCellAccessOff;
+			capReadCellAccess = capWriteCellAccess = capCellAccess;
+			capWordline += capWriteCellGate * numColumn;
+			capWordlineRead += capReadCellAccess * numColumn / 2;
+			if(tech->featureSize <= 14 * 1e-9){
+				const double drainLoad = tech->cap_draintotal * cell->widthAccessCMOS * tech->effective_width;
+				capBitline += drainLoad * numRow / 2;
+				capBitlineRead += drainLoad * numRow;
+			} else {
+				capBitline += capWriteCellAccess * numRow / 2;
+				capBitlineRead += capReadCellAccess * numRow;
+			}
+		}
+		resCellAccess = resWriteCellAccess;
+		resCellAccessOff = resWriteCellAccessOff;
+		capCellAccess = capWriteCellAccess;
 		voltagePrecharge = devtech->vdd; //In the hold state, RBL is high
 
-		resMemCellOn = CalculateOnResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * tech->featureSize, NMOS, inputParameter->temperature, *tech);
-		resMemCellOff = CalculateOffResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * tech->featureSize, NMOS, inputParameter->temperature, *tech);
+		resMemCellOn = resReadCellAccess;
+		resMemCellOff = resReadCellAccessOff;
 
 		if (cell->readMode) { /* voltage-sensing */
 			if (cell->readVoltage == 0) {  /* Current-in voltage sensing */
@@ -449,8 +550,27 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 		capWordline += CalculateGateCap(((tech->featureSize <= 14*1e-9)? 2:1) * tech->featureSize, *tech) * numColumn * cell->gateCouplingRatio / (cell->gateCouplingRatio + 1);
 		capBitline  += capCellAccess * (numRow / pageCount) / 2;	/* 2 is due to shared contact and the effective row count is numRow/pageCount */
 		voltagePrecharge = tech->vdd * 0.6;	/* SLC NAND flash bitline precharge voltage is assumed to 0.6Vdd */
-	} else {	/* MLC NAND flash */
-		// TO-DO
+	} else {
+		cout << "[Mat] Error: Unsupported memory-cell type in precharge/access modeling." << endl;
+		invalid = true;
+		initialized = true;
+		return;
+	}
+
+	if (cell->memCellType == DRAM || cell->memCellType == eDRAM) {
+		const double sharingCap = cell->capDRAMCell + capBitline;
+		if (!IsFinitePositive(cell->capDRAMCell) || !IsFinitePositive(sharingCap)) {
+			cout << "[Mat] Error: DRAM charge-sharing capacitances must be finite and positive." << endl;
+			invalid = true;
+			initialized = true;
+			return;
+		}
+		senseVoltage = devtech->vdd / 2 * cell->capDRAMCell / sharingCap;
+		if (!IsFinitePositive(senseVoltage) || senseVoltage < cell->minSenseVoltage) {
+			invalid = true;
+			initialized = true;
+			return;
+		}
 	}
 
 	/* Repeater Insertion Scheme */
@@ -497,7 +617,18 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 
 	/* Initialize sub-component */
 
-	precharger.Initialize(tech->vdd, numColumn, capBitlineRead, resBitline, lenBitline);
+	/* Historically every path passed capBitlineRead, although only gcDRAM
+	 * initializes it. Resolve the actual modeled voltage and read-bitline load. */
+	const double prechargerBitlineCap = (cell->memCellType == gcDRAM) ? capBitlineRead : capBitline;
+	if (!IsFinitePositive(voltagePrecharge) || !IsFinitePositive(prechargerBitlineCap)
+			|| !IsFiniteNonNegative(resBitline) || !IsFiniteNonNegative(lenBitline)
+			|| numColumn > std::numeric_limits<int>::max()) {
+		cout << "[Mat] Error: Invalid precharger voltage, capacitance, resistance, length, or column count." << endl;
+		invalid = true;
+		initialized = true;
+		return;
+	}
+	precharger.Initialize(voltagePrecharge, static_cast<int>(numColumn), prechargerBitlineCap, resBitline, lenBitline);
 	precharger.CalculateRC();
 
 	rowDecoder.Initialize(numRow, rowDecoderCap, sectionres, multipleRowPerSet, areaOptimizationLevel, maxWordlineCurrent, false, lenWordline);
@@ -564,7 +695,16 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 		}
 		gcRowDecoder.CalculateRC();
 
-		writecharger.Initialize(tech->vdd, numColumn, capBitline, resBitline, lenBitline);
+		if (!IsFinitePositive(tech->vdd) || !IsFinitePositive(capBitline)
+				|| !IsFiniteNonNegative(resBitline) || !IsFiniteNonNegative(lenBitline)
+				|| numColumn <= 0 || numColumn > std::numeric_limits<int>::max()) {
+			cout << "[Mat] Error: Invalid gcDRAM write-charger voltage, capacitance, resistance, length, or column count." << endl;
+			invalid = true;
+			initialized = true;
+			return;
+		}
+		writecharger.Initialize(tech->vdd, static_cast<int>(numColumn), capBitline,
+				resBitline, lenBitline);
 		writecharger.CalculateRC();
 	}
 
@@ -634,20 +774,20 @@ void Mat::CalculateArea() {
 			gcRowDecoder.CalculateArea();
 			if (gcRowDecoder.height > height) {
 				/* assume magic folding */
-				addWidth = gcRowDecoder.area / height;
+				addWidth += gcRowDecoder.area / height;
 			} else {
 				/* allow white space */
-				addWidth = gcRowDecoder.width;
+				addWidth += gcRowDecoder.width;
 			}
 
 			// Write Drivers
 			writecharger.CalculateArea();
 			if (writecharger.width > width) {
 				/* assume magic folding */
-				addHeight = writecharger.area / writecharger.width;
+				addHeight += writecharger.area / writecharger.width;
 			} else {
 				/* allow white space */
-				addHeight = writecharger.height;
+				addHeight += writecharger.height;
 			}
 		}
 
@@ -666,61 +806,173 @@ void Mat::CalculateArea() {
 		stackedMemTiers = 1;
 
 		if(inputParameter->monolithic3DMat){
-
-			tsvArray.CalculateArea(); /* Initialize Area per MIV */
-			double redundancyFactor = inputParameter->tsvRedundancy;
-			if(cell->memCellType == gcDRAM) tsvArray.numTotalBits = (int)((double)((4*(numRow + numColumn)) * redundancyFactor) + 0.1); /* Split R/W Paths*/
-			else if(cell->memCellType == SRAM || cell->memCellType == MRAM || cell->memCellType == memristor || cell->memCellType == PCRAM)  
-				tsvArray.numTotalBits = (int)((double)((2*(numRow + 2*numColumn)) * redundancyFactor) + 0.1); /* SRAM BL,BLB. MRAM->PCM SL,BL,WL*/
-			else tsvArray.numTotalBits = (int)((double)((2*(numRow + numColumn)) * redundancyFactor) + 0.1); /* Baseline, Enter + Exit */
+			tsvArray.CalculateArea(); /* Area of one MIV. */
+			const long double redundancyFactor = inputParameter->tsvRedundancy;
+			long double baseSignalCount = 0;
+			if (cell->memCellType == gcDRAM) {
+				baseSignalCount = 4.0L * (static_cast<long double>(numRow) + numColumn);
+			} else if (cell->memCellType == SRAM || cell->memCellType == MRAM
+					|| cell->memCellType == memristor || cell->memCellType == PCRAM) {
+				baseSignalCount = 2.0L * (static_cast<long double>(numRow) + 2.0L * numColumn);
+			} else {
+				baseSignalCount = 2.0L * (static_cast<long double>(numRow) + numColumn);
+			}
+			const long double scaledMivs = std::ceil(baseSignalCount * redundancyFactor);
+			if (!std::isfinite(static_cast<double>(redundancyFactor)) || redundancyFactor <= 0
+					|| scaledMivs <= 0
+					|| scaledMivs > std::numeric_limits<int>::max()
+					|| inputParameter->maxMatLayers <= 0) {
+				cout << "[Mat] Error: M3D MIV count or tier limit is outside the supported range." << endl;
+				invalid = true;
+				height = width = area = invalid_value;
+				return;
+			}
+			m3d.mivsPerTier = static_cast<std::uint64_t>(scaledMivs);
+			tsvArray.numTotalBits = static_cast<int>(m3d.mivsPerTier);
 			tsvArray.numAccessBits = tsvArray.numTotalBits;
 
-			double areaMIV = tsvArray.area * tsvArray.numTotalBits;
+			m3d.peripheralLogicArea = rowDecoder.area + precharger.area
+					+ bitlineMux.area + senseAmp.area + senseAmpMuxLev1.area + senseAmpMuxLev2.area
+					+ bitlineMuxDecoder.area + senseAmpMuxLev1Decoder.area + senseAmpMuxLev2Decoder.area;
+			if (cell->memCellType == gcDRAM)
+				m3d.peripheralLogicArea += gcRowDecoder.area + writecharger.area;
+			if (!IsFinitePositive(m3d.peripheralLogicArea) || !IsFiniteNonNegative(tsvArray.area)) {
+				invalid = true;
+				height = width = area = invalid_value;
+				return;
+			}
+			logicWidth = logicHeight = std::sqrt(m3d.peripheralLogicArea);
 
-			// logicArea = addWidth * addHeight; /* FEOL Area, Assume ~ Similar Placement */
-			logicArea = gcRowDecoder.area + rowDecoder.area + precharger.area + writecharger.area
-			 + bitlineMux.area + senseAmp.area + senseAmpMuxLev1.area + senseAmpMuxLev2.area
-			 + bitlineMuxDecoder.area + senseAmpMuxLev1Decoder.area + senseAmpMuxLev2Decoder.area;
-			
-			/* Default assumption, but should be moved around for subarray ratio */
-			logicWidth = logicHeight = sqrt(logicArea);
-
-			/* Check the memory stacking needs */
-			bool dimReduction;
 			memoryHeight = lenBitline;
 			memoryWidth = lenWordline;
 			memoryArea = memoryHeight * memoryWidth;
-			dimReduction = memoryHeight > memoryWidth;
+			bool reduceHeight = memoryHeight > memoryWidth;
+			std::uint64_t tiers = 1;
+			const std::uint64_t tierLimit = static_cast<std::uint64_t>(inputParameter->maxMatLayers);
 
-			while (memoryArea > logicArea) {
-				if(dimReduction){
+			/* Historically, folding continued until logic dominated and only then
+			 * invalidated a design that exceeded the layer limit. Check the next
+			 * doubled tier count first so a memory-dominated design remains valid at
+			 * the cap, while retaining the alternating legacy fold dimensions. */
+			while (true) {
+				if (tiers > std::numeric_limits<std::uint64_t>::max() / 2)
+					break;
+				const std::uint64_t nextTiers = tiers * 2;
+				if (nextTiers > tierLimit)
+					break;
+				const long double currentMivArea = static_cast<long double>(m3d.mivsPerTier)
+						* tiers * tsvArray.area;
+				const long double nextMivArea = static_cast<long double>(m3d.mivsPerTier)
+						* nextTiers * tsvArray.area;
+				const long double currentProjectedArea = std::max(
+						static_cast<long double>(memoryArea),
+						static_cast<long double>(m3d.peripheralLogicArea) + currentMivArea);
+				const long double nextProjectedArea = std::max(
+						static_cast<long double>(memoryArea) / 2.0L,
+						static_cast<long double>(m3d.peripheralLogicArea) + nextMivArea);
+				if (!std::isfinite(currentProjectedArea) || !std::isfinite(nextProjectedArea)
+						|| nextProjectedArea >= currentProjectedArea)
+					break;
+				if (reduceHeight) {
 					memoryHeight /= 2;
-					resBitline   /= 2; /* Parallelly Driven Lines in BEOL */
+					resBitline /= 2;
 				} else {
-					memoryWidth  /= 2;
-					resWordline  /= 2; /* Parallelly Driven Lines in BEOL */
+					memoryWidth /= 2;
+					resWordline /= 2;
 				}
-				dimReduction = !dimReduction;
+				reduceHeight = !reduceHeight;
 				memoryArea = memoryHeight * memoryWidth;
-				stackedMemTiers*=2;
+				tiers = nextTiers;
 			}
 
-			if(stackedMemTiers > inputParameter->maxMatLayers) invalid = true; // Limit the number of tiers in the design
+			if (m3d.mivsPerTier > std::numeric_limits<std::uint64_t>::max() / tiers) {
+				invalid = true;
+				height = width = area = invalid_value;
+				return;
+			}
+			m3d.totalMivCount = m3d.mivsPerTier * tiers;
+			m3d.totalMivArea = static_cast<double>(m3d.totalMivCount) * tsvArray.area;
+			m3d.finalLogicLayerArea = m3d.peripheralLogicArea + m3d.totalMivArea;
+			m3d.perTierMemoryArea = memoryArea;
+			m3d.projectedArea = MAX(m3d.finalLogicLayerArea, m3d.perTierMemoryArea);
+			m3d.dominantTier = (m3d.finalLogicLayerArea >= m3d.perTierMemoryArea)
+					? M3DDominantTier::logic : M3DDominantTier::memory;
+			if (!IsFinitePositive(m3d.totalMivArea) || !IsFinitePositive(m3d.finalLogicLayerArea)
+					|| !IsFinitePositive(m3d.perTierMemoryArea) || !IsFinitePositive(m3d.projectedArea)
+					|| tiers > static_cast<std::uint64_t>(std::numeric_limits<int>::max())) {
+				invalid = true;
+				height = width = area = invalid_value;
+				return;
+			}
 
-			memoryArea = memoryHeight * memoryWidth;
-			areaRatio = memoryHeight / (memoryArea);
-			logicArea += areaMIV * stackedMemTiers;
+			stackedMemTiers = static_cast<int>(tiers);
+			logicArea = m3d.finalLogicLayerArea;
+			memoryArea = m3d.perTierMemoryArea;
+			area = m3d.projectedArea;
+			areaRatio = memoryHeight / memoryArea;
+			height = areaRatio * area;
+			width = area / height;
 
-			area = logicArea;
-			height = areaRatio * logicArea;
-			width = logicArea / height;
+			/* Preserve the legacy pre-MIV logic mismatch for the wire-extension proxy. */
+			const double wireExtension = std::sqrt(std::fabs(memoryArea - m3d.peripheralLogicArea));
+			const double bitlineCapDelta = tsvArray.width * stackedMemTiers * localWire->capWirePerUnit
+					+ wireExtension * localWire->capWirePerUnit + tsvArray.cap * stackedMemTiers;
+			const double wordlineCapDelta = tsvArray.width * stackedMemTiers * localWire->capWirePerUnit
+					+ wireExtension * localWire->capWirePerUnit + tsvArray.cap * stackedMemTiers;
+			const double bitlineResDelta = tsvArray.width * stackedMemTiers * localWire->resWirePerUnit_M0
+					+ tsvArray.res * stackedMemTiers + wireExtension * localWire->resWirePerUnit_M0;
+			const double wordlineResDelta = tsvArray.width * stackedMemTiers * localWire->resWirePerUnit_M1
+					+ tsvArray.res * stackedMemTiers + wireExtension * localWire->resWirePerUnit_M1;
+			if (!IsFiniteNonNegative(bitlineCapDelta) || !IsFiniteNonNegative(wordlineCapDelta)
+					|| !IsFiniteNonNegative(bitlineResDelta) || !IsFiniteNonNegative(wordlineResDelta)) {
+				invalid = true;
+				height = width = area = invalid_value;
+				return;
+			}
+			capBitline += bitlineCapDelta;
+			capWordline += wordlineCapDelta;
+			resBitline += bitlineResDelta;
+			resWordline += wordlineResDelta;
+			if (cell->memCellType == gcDRAM) {
+				capBitlineRead += bitlineCapDelta;
+				capWordlineRead += wordlineCapDelta;
+			}
 
-			/* Consider Wireline Extention and MIV capacitance effect on BL/WL latency*/
-			capBitline += tsvArray.width * stackedMemTiers * localWire->capWirePerUnit + (sqrt(abs(memoryArea - logicArea))) * localWire->capWirePerUnit + (tsvArray.cap  * stackedMemTiers);
-			capWordline += tsvArray.width * stackedMemTiers * localWire->capWirePerUnit + (sqrt(abs(memoryArea - logicArea))) * localWire->capWirePerUnit + (tsvArray.cap  * stackedMemTiers);
-			resBitline += tsvArray.width * stackedMemTiers * localWire->resWirePerUnit_M0 + (tsvArray.res * stackedMemTiers) + (sqrt(abs(memoryArea - logicArea))) * localWire->resWirePerUnit_M0;
-			resWordline += tsvArray.width * stackedMemTiers * localWire->resWirePerUnit_M1 + (tsvArray.res * stackedMemTiers) + (sqrt(abs(memoryArea - logicArea))) * localWire->resWirePerUnit_M1;
-
+			/* These components were sized before area folding. Preserve their
+			 * sizes, but propagate the resolved electrical loads into RC/power. */
+			sectionres = resWordline / (numRepeaters + 1);
+			sectioncap = capWordline / (numRepeaters + 1);
+			sectionresMux = resWordline / (numRepeaters + 1);
+			sectioncapMux += wordlineCapDelta / (numRepeaters + 1);
+			const double rowDecoderCap = sectioncap + (numRepeaters ? gateCapRep : 0);
+			const double muxDecoderCap = sectioncapMux + (numRepeaters ? gateCapRep : 0);
+			rowDecoder.capLoad = rowDecoder.outputDriver.outputCap = rowDecoderCap;
+			rowDecoder.resLoad = rowDecoder.outputDriver.outputRes = sectionres;
+			bitlineMuxDecoder.capLoad = bitlineMuxDecoder.outputDriver.outputCap = muxDecoderCap;
+			bitlineMuxDecoder.resLoad = bitlineMuxDecoder.outputDriver.outputRes = sectionresMux;
+			senseAmpMuxLev1Decoder.capLoad = senseAmpMuxLev1Decoder.outputDriver.outputCap = muxDecoderCap;
+			senseAmpMuxLev1Decoder.resLoad = senseAmpMuxLev1Decoder.outputDriver.outputRes = sectionresMux;
+			senseAmpMuxLev2Decoder.capLoad = senseAmpMuxLev2Decoder.outputDriver.outputCap = muxDecoderCap;
+			senseAmpMuxLev2Decoder.resLoad = senseAmpMuxLev2Decoder.outputDriver.outputRes = sectionresMux;
+			precharger.capBitline = (cell->memCellType == gcDRAM) ? capBitlineRead : capBitline;
+			precharger.resBitline = resBitline;
+			if (cell->memCellType == gcDRAM) {
+				gcRowDecoder.capLoad = gcRowDecoder.outputDriver.outputCap = capWordlineRead;
+				gcRowDecoder.resLoad = gcRowDecoder.outputDriver.outputRes = resWordline;
+				writecharger.capBitline = capBitline;
+				writecharger.resBitline = resBitline;
+			}
+			if (cell->memCellType == DRAM || cell->memCellType == eDRAM) {
+				const double sharingCap = cell->capDRAMCell + capBitline;
+				senseVoltage = devtech->vdd / 2 * cell->capDRAMCell / sharingCap;
+				if (!IsFinitePositive(sharingCap) || !IsFinitePositive(senseVoltage)
+						|| senseVoltage < cell->minSenseVoltage) {
+					invalid = true;
+					height = width = area = invalid_value;
+					return;
+				}
+				senseAmp.senseVoltage = senseVoltage;
+			}
 		}
 
 	}
@@ -732,6 +984,7 @@ void Mat::CalculateLatency(double _rampInput) {
 	} else if (invalid) {
 		readLatency = writeLatency = invalid_value;
 	} else {
+		dramTiming = DRAMTimingResult();
 
 		/* Row Decoder Repeater Calculation */
 		double resPullDown;
@@ -849,20 +1102,72 @@ void Mat::CalculateLatency(double _rampInput) {
 			double cap = (capCellAccess + cell->capDRAMCell) * (capBitline + bitlineMux.capForPreviousDelayCalculation)
 					/ (capCellAccess + cell->capDRAMCell + capBitline + bitlineMux.capForPreviousDelayCalculation);
 			double res = resBitline + resCellAccess;
+			if (!IsFinitePositive(cap) || !IsFinitePositive(res)) {
+				cout << "[Mat] Error: DRAM read-path R/C must be finite and positive." << endl;
+				invalid = true;
+				readLatency = writeLatency = invalid_value;
+				return;
+			}
 			double tau = 2.3 * res * cap;
 			double bitlineRamp = 0;
 			bitlineDelay = horowitz(tau, 0, rowDecoder.rampOutput, &bitlineRamp);
+			readBitlineDelay = bitlineDelay;
 			senseAmp.CalculateLatency(bitlineRamp);
 			senseAmpMuxLev1.CalculateLatency(1e20);
 			senseAmpMuxLev2.CalculateLatency(senseAmpMuxLev1.rampOutput);
 
-            /* Refresh operation does not pass sense amplifier. */
-            refreshLatency = decoderLatency + bitlineDelay + senseAmp.readLatency;
-            refreshLatency *= numRow; // TOTAL refresh latency for mat
+			const double writePathCap = cell->capDRAMCell + capCellAccess + capBitline
+					+ bitlineMux.capForPreviousDelayCalculation;
+			const double writePathResistance = resBitline + resCellAccess;
+			const double fullWriteSwing = std::fabs(cell->resetVoltage - voltagePrecharge);
+			const double residualRatio = inputParameter->dramTargetResidualRatio;
+			if (!IsFinitePositive(writePathCap) || !IsFinitePositive(writePathResistance)
+					|| !IsFinitePositive(fullWriteSwing) || !std::isfinite(residualRatio)
+					|| residualRatio <= 0 || residualRatio >= 1) {
+				cout << "[Mat] Error: DRAM write settling requires a positive swing/R/C and residual ratio in (0,1)." << endl;
+				invalid = true;
+				readLatency = writeLatency = invalid_value;
+				return;
+			}
+			const double targetResidual = fullWriteSwing * residualRatio;
+			const double writeSettlingConstant = writePathResistance * writePathCap
+					* std::log(1.0 / residualRatio);
+			const double remainingRestoreSwing = MAX(fullWriteSwing - senseVoltage, 0.0);
+			double restoreSettlingConstant = 0;
+			if (remainingRestoreSwing > targetResidual) {
+				restoreSettlingConstant = writePathResistance * writePathCap
+						* std::log(remainingRestoreSwing / targetResidual);
+			}
+			double writeBitlineRamp = 0;
+			double restoreRamp = 0;
+			writeBitlineDelay = ExactSettlingDelay(writeSettlingConstant,
+					rowDecoder.rampOutput, &writeBitlineRamp);
+			dramTiming.restoreDelay = (restoreSettlingConstant > 0)
+					? ExactSettlingDelay(restoreSettlingConstant,
+							rowDecoder.rampOutput, &restoreRamp) : 0;
+			dramTiming.writeBitlineDelay = writeBitlineDelay;
+
+			/* ReadLatency remains time-to-data. Restoration is a cycle/refresh cost. */
 			readLatency = decoderLatency + bitlineDelay + senseAmp.readLatency
 					+ senseAmpMuxLev1.readLatency + senseAmpMuxLev2.readLatency + precharger.readLatency;
-			/* assume symmetric read/write for DRAM/eDRAM bitline delay */
-			writeLatency = readLatency;
+			dramTiming.accessLatency = readLatency;
+			dramTiming.readCycleLatency = readLatency + dramTiming.restoreDelay;
+			const double writeDecoderLatency = MAX(rowDecoder.writeLatency + rowDecoderRepeaterLatency,
+					columnDecoderLatency + rowDecoderRepeaterLatencyMux);
+			writeLatency = writeDecoderLatency + writeBitlineDelay;
+			/* Refresh scheduling consumes the complete destructive-read cycle,
+			 * while the externally reported read response remains time-to-data. */
+			refreshLatency = dramTiming.readCycleLatency * numRow;
+			if (!IsFiniteNonNegative(bitlineDelay) || !IsFiniteNonNegative(dramTiming.restoreDelay)
+					|| !IsFinitePositive(dramTiming.accessLatency)
+					|| !IsFinitePositive(dramTiming.readCycleLatency)
+					|| !IsFinitePositive(writeBitlineDelay) || !IsFinitePositive(writeLatency)
+					|| !IsFiniteNonNegative(refreshLatency)) {
+				cout << "[Mat] Error: DRAM timing produced a non-finite or negative result." << endl;
+				invalid = true;
+				readLatency = writeLatency = invalid_value;
+				return;
+			}
 		} else if (cell->memCellType == gcDRAM) {
 			gcRowDecoder.CalculateLatency(_rampInput);
 			writecharger.CalculateLatency(_rampInput);
@@ -870,29 +1175,64 @@ void Mat::CalculateLatency(double _rampInput) {
 			decoderLatency = MAX(rowDecoder.readLatency, columnDecoderLatency);
 			gcDecoderLatency = MAX(gcRowDecoder.readLatency, columnDecoderLatency);
 			
-			double capRBL = (capBitlineRead + bitlineMux.capForPreviousDelayCalculation);
-			double capWBL = (capCellAccess + CalculateGateCap(((tech->featureSize <= 14*1e-9)? 2:1) * tech->featureSize, *tech) + capBitline + bitlineMux.capForPreviousDelayCalculation);
-
-			double res = resBitline + resCellAccess;
-			
-			double tauRBL = 2.3 * res * capRBL;
-			double tauWBL = 2.3 * res * capWBL;
+			const double capRBL = capReadCellAccess + capBitlineRead
+					+ bitlineMux.capForPreviousDelayCalculation;
+			/* The read transistor gate is the storage-node load; the write
+			 * transistor contributes only its own WBL drain load. */
+			const double capWBL = capWriteCellAccess + capReadCellGate + capBitline
+					+ bitlineMux.capForPreviousDelayCalculation;
+			const double readPathResistance = resBitline + resReadCellAccess;
+			const double writePathResistance = resBitline + resWriteCellAccess;
+			if (!IsFinitePositive(capRBL) || !IsFinitePositive(capWBL)
+					|| !IsFinitePositive(readPathResistance) || !IsFinitePositive(writePathResistance)) {
+				cout << "[Mat] Error: gcDRAM split read/write R/C must be finite and positive." << endl;
+				invalid = true;
+				readLatency = writeLatency = invalid_value;
+				return;
+			}
+			const double tauRBL = 2.3 * readPathResistance * capRBL;
+			const double tauWBL = writePathResistance * capWBL
+					* std::log(1.0 / inputParameter->dramTargetResidualRatio);
+			if (!IsFinitePositive(tauRBL) || !IsFinitePositive(tauWBL)) {
+				cout << "[Mat] Error: gcDRAM read/write settling constants must be finite and positive." << endl;
+				invalid = true;
+				readLatency = writeLatency = invalid_value;
+				return;
+			}
 			
 			double bitlineRampRead = 0;
 			double bitlineRampWrite = 0;
 
-			writeBitlineDelay = horowitz(tauWBL, 0, rowDecoder.rampOutput, &bitlineRampWrite);
+			writeBitlineDelay = ExactSettlingDelay(tauWBL,
+					rowDecoder.rampOutput, &bitlineRampWrite);
 			readBitlineDelay = horowitz(tauRBL, 0, gcRowDecoder.rampOutput, &bitlineRampRead);
 
-			double lrs_resistance = CalculateOnResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * tech->featureSize, NMOS, inputParameter->temperature, *tech);
-			double hrs_resistance = CalculateOffResistance(((tech->featureSize <= 14*1e-9)? 2:1) * cell->widthAccessCMOS * tech->featureSize, NMOS, inputParameter->temperature, *tech);
+			const double lrs_resistance = resReadCellAccess;
+			const double hrs_resistance = resReadCellAccessOff;
 
-			double tau = lrs_resistance * (capCellAccess + capBitlineRead + bitlineMux.capForPreviousDelayCalculation)
+			double tau = lrs_resistance * (capReadCellAccess + capBitlineRead + bitlineMux.capForPreviousDelayCalculation)
 					+ resBitline * (bitlineMux.capForPreviousDelayCalculation + capBitlineRead / 2); /* time constant of LRS */
-			bitlineDelayOn = tau * log((voltagePrecharge - voltageMemCellOn)/(voltagePrecharge - voltageMemCellOn - senseVoltage));  /* BitlineDelay of HRS */
-			tau = hrs_resistance * (capCellAccess + capBitlineRead + bitlineMux.capForPreviousDelayCalculation)
+			const double availableOnSwing = std::fabs(voltagePrecharge - voltageMemCellOn);
+			const double availableOffSwing = std::fabs(voltageMemCellOff - voltagePrecharge);
+			if (!IsFinitePositive(tau) || !IsFinitePositive(availableOnSwing)
+					|| !IsFinitePositive(availableOffSwing) || !IsFinitePositive(senseVoltage)
+					|| availableOnSwing <= senseVoltage
+					|| availableOffSwing <= senseVoltage) {
+				cout << "[Mat] Error: gcDRAM read swing is too small or invalid." << endl;
+				invalid = true;
+				readLatency = writeLatency = invalid_value;
+				return;
+			}
+			bitlineDelayOn = tau * std::log(availableOnSwing / (availableOnSwing - senseVoltage));
+			tau = hrs_resistance * (capReadCellAccess + capBitlineRead + bitlineMux.capForPreviousDelayCalculation)
 					+ resBitline * (bitlineMux.capForPreviousDelayCalculation + capBitlineRead / 2);  /* time constant of HRS */
-			bitlineDelayOff = tau * log((voltageMemCellOff - voltagePrecharge)/(voltageMemCellOff - voltagePrecharge - senseVoltage));
+			if (!IsFinitePositive(tau)) {
+				cout << "[Mat] Error: gcDRAM HRS read time constant must be finite and positive." << endl;
+				invalid = true;
+				readLatency = writeLatency = invalid_value;
+				return;
+			}
+			bitlineDelayOff = tau * std::log(availableOffSwing / (availableOffSwing - senseVoltage));
 			bitlineDelay = MAX(bitlineDelayOn, bitlineDelayOff);
 			readBitlineDelay = bitlineDelay;
 
@@ -908,6 +1248,27 @@ void Mat::CalculateLatency(double _rampInput) {
 			writeLatency = decoderLatency + writeBitlineDelay + writecharger.readLatency;
 			readLatency = gcDecoderLatency + readBitlineDelay + senseAmp.readLatency
 					+ senseAmpMuxLev1.readLatency + senseAmpMuxLev2.readLatency + precharger.readLatency;
+			if (!AreFiniteNonNegative({
+					columnDecoderLatency, decoderLatency, gcDecoderLatency,
+					rowDecoder.readLatency, rowDecoder.writeLatency,
+					gcRowDecoder.readLatency, gcRowDecoder.writeLatency,
+					bitlineMuxDecoder.readLatency, bitlineMuxDecoder.writeLatency,
+					senseAmpMuxLev1Decoder.readLatency, senseAmpMuxLev1Decoder.writeLatency,
+					senseAmpMuxLev2Decoder.readLatency, senseAmpMuxLev2Decoder.writeLatency,
+					precharger.readLatency, precharger.writeLatency,
+					writecharger.readLatency, writecharger.writeLatency,
+					bitlineMux.readLatency, bitlineMux.writeLatency,
+					senseAmp.readLatency, senseAmp.writeLatency,
+					senseAmpMuxLev1.readLatency, senseAmpMuxLev1.writeLatency,
+					senseAmpMuxLev2.readLatency, senseAmpMuxLev2.writeLatency,
+					chargeLatency, bitlineDelayOn, bitlineDelayOff,
+					readBitlineDelay, writeBitlineDelay, refreshLatency})
+					|| !IsFinitePositive(readLatency) || !IsFinitePositive(writeLatency)) {
+				cout << "[Mat] Error: gcDRAM timing produced a non-finite or negative component." << endl;
+				invalid = true;
+				readLatency = writeLatency = invalid_value;
+				return;
+			}
 
 		} else if (cell->memCellType == MRAM || cell->memCellType == PCRAM || cell->memCellType == memristor || cell->memCellType == FBRAM) {
 			double bitlineRamp = 0;
@@ -1023,6 +1384,9 @@ void Mat::CalculatePower() {
 	} else if (invalid) {
 		readDynamicEnergy = writeDynamicEnergy = leakage = invalid_value;
 	} else {
+		gcDramPower = GcDRAMPowerResult();
+		aosLeakageUpperBound = 0;
+		refreshDynamicEnergy = 0;
 		precharger.CalculatePower();
 		rowDecoder.CalculatePower();
 		bitlineMuxDecoder.CalculatePower();
@@ -1059,15 +1423,32 @@ void Mat::CalculatePower() {
 			double writeVoltage = cell->resetVoltage;	/* should also equal to setVoltage, for DRAM, it is Vdd */
 			writeDynamicEnergy = (capBitline + bitlineMux.capForPreviousPowerCalculation) * writeVoltage * writeVoltage * numColumn;
 			leakage = readDynamicEnergy / DRAM_REFRESH_PERIOD * numRow;
+			if (cell->memCellType == eDRAM && cell->oxideTransistor) {
+				aosLeakageUpperBound = tech->vdd * static_cast<double>(numRow)
+						* static_cast<double>(numColumn) * aosAccessOperatingPoint.Ioff;
+				leakage += aosLeakageUpperBound;
+			}
 		} else if (cell->memCellType == gcDRAM) {
 			gcRowDecoder.CalculatePower();
-			/* Codes below calculate the DRAM bitline power */
-			// TODO: Write in Major Information for Bidir Power
-			readDynamicEnergy = (capCellAccess + bitlineMux.capForPreviousPowerCalculation) * senseVoltage * devtech->vdd * numColumn;
-            refreshDynamicEnergy = readDynamicEnergy;
-			double writeVoltage = cell->resetVoltage;	/* should also equal to setVoltage, for DRAM, it is Vdd */
-			writeDynamicEnergy = (capBitline + bitlineMux.capForPreviousPowerCalculation) * writeVoltage * writeVoltage * numColumn;
+			writecharger.CalculatePower();
+			/* Split read/write bitlines and storage-node loading are accounted
+			 * independently before peripheral energy is added below. */
+			readDynamicEnergy = (capReadCellAccess + capBitlineRead
+					+ bitlineMux.capForPreviousPowerCalculation) * senseVoltage * devtech->vdd * numColumn;
+	            refreshDynamicEnergy = readDynamicEnergy;
+				double writeVoltage = cell->resetVoltage;	/* should also equal to setVoltage, for DRAM, it is Vdd */
+			writeDynamicEnergy = (capWriteCellAccess + capReadCellGate + capBitline
+					+ bitlineMux.capForPreviousPowerCalculation) * writeVoltage * writeVoltage * numColumn;
+			gcDramPower.readBitlineAccessEnergy = readDynamicEnergy;
+			gcDramPower.writeBitlineAccessEnergy = writeDynamicEnergy;
 			leakage = writeDynamicEnergy / DRAM_REFRESH_PERIOD * numRow;
+			if (cell->oxideTransistor) {
+				aosLeakageUpperBound = tech->vdd * (static_cast<double>(numRow) + 2.0)
+						* static_cast<double>(numColumn)
+						* (aosReadOperatingPoint.Ioff + aosWriteOperatingPoint.Ioff);
+				gcDramPower.aosLeakageUpperBound = aosLeakageUpperBound;
+				leakage += aosLeakageUpperBound;
+			}
 		} else if (cell->memCellType == MRAM || cell->memCellType == PCRAM || cell->memCellType == memristor || cell->memCellType == FBRAM) {
 			if (cell->readMode == false) {	/* current-sensing */
 				/* Use ICCAD 2009 model */
@@ -1228,16 +1609,27 @@ void Mat::CalculatePower() {
 				+ senseAmp.writeDynamicEnergy + senseAmpMuxLev1.writeDynamicEnergy + senseAmpMuxLev2.writeDynamicEnergy;
 
 		if (cell->memCellType == gcDRAM) {
-			writeDynamicEnergy += writecharger.readDynamicEnergy - precharger.readDynamicEnergy;
+			gcDramPower.writeChargeDriverEnergy = writecharger.readDynamicEnergy;
+			writeDynamicEnergy += gcDramPower.writeChargeDriverEnergy;
 			readDynamicEnergy = readDynamicEnergy - rowDecoder.readDynamicEnergy + gcRowDecoder.readDynamicEnergy;
 			leakage += gcRowDecoder.leakage + writecharger.leakage;
 		}
         
-		/* Read all column energy + row decoder + sense amp + precharger is enough for one mat row REF. */
-        refreshDynamicEnergy += rowDecoder.readDynamicEnergy + precharger.readDynamicEnergy
-                             + senseAmp.readDynamicEnergy;
-        refreshDynamicEnergy *= (numRow+2); // Energy for this entire mat 
-		if(cell->memCellType == gcDRAM) refreshDynamicEnergy += gcRowDecoder.readDynamicEnergy + writecharger.readDynamicEnergy; /* Split Read/Write Paths*/
+		if (cell->memCellType == gcDRAM) {
+			/* One gcDRAM refresh reads and rewrites the row through both split
+			 * paths. Apply the retained reference-row convention to the full sum. */
+			const double refreshEnergyPerRow = gcDramPower.readBitlineAccessEnergy
+					+ gcDramPower.writeBitlineAccessEnergy
+					+ rowDecoder.readDynamicEnergy + gcRowDecoder.readDynamicEnergy
+					+ precharger.readDynamicEnergy + writecharger.readDynamicEnergy
+					+ senseAmp.readDynamicEnergy;
+			refreshDynamicEnergy = refreshEnergyPerRow * (numRow + 2);
+		} else {
+			/* Read all columns plus row decoder, sense amp, and precharger per row. */
+			refreshDynamicEnergy += rowDecoder.readDynamicEnergy + precharger.readDynamicEnergy
+					+ senseAmp.readDynamicEnergy;
+			refreshDynamicEnergy *= (numRow + 2);
+		}
 
 		/* for assymetric RESET and SET latency calculation only */
 		setDynamicEnergy += cellSetEnergy + rowDecoder.setDynamicEnergy + bitlineMuxDecoder.writeDynamicEnergy + senseAmpMuxLev1Decoder.writeDynamicEnergy
@@ -1254,6 +1646,45 @@ void Mat::CalculatePower() {
 		leakage += rowDecoder.leakage + bitlineMuxDecoder.leakage + senseAmpMuxLev1Decoder.leakage
 				+ senseAmpMuxLev2Decoder.leakage + precharger.leakage + bitlineMux.leakage
 				+ senseAmp.leakage + senseAmpMuxLev1.leakage + senseAmpMuxLev2.leakage;
+
+		if ((cell->memCellType == DRAM || cell->memCellType == eDRAM || cell->memCellType == gcDRAM)
+				&& (!IsFiniteNonNegative(readDynamicEnergy)
+						|| !IsFiniteNonNegative(writeDynamicEnergy)
+						|| !IsFiniteNonNegative(refreshDynamicEnergy)
+						|| !IsFiniteNonNegative(leakage)
+						|| !IsFiniteNonNegative(aosLeakageUpperBound))) {
+			cout << "[Mat] Error: DRAM energy or leakage produced a non-finite or negative result." << endl;
+			invalid = true;
+			readDynamicEnergy = writeDynamicEnergy = refreshDynamicEnergy = leakage = invalid_value;
+			return;
+		}
+		if (cell->memCellType == gcDRAM
+				&& !AreFiniteNonNegative({
+						gcDramPower.readBitlineAccessEnergy,
+						gcDramPower.writeBitlineAccessEnergy,
+						gcDramPower.writeChargeDriverEnergy,
+						gcDramPower.aosLeakageUpperBound,
+						rowDecoder.readDynamicEnergy, rowDecoder.writeDynamicEnergy, rowDecoder.leakage,
+						gcRowDecoder.readDynamicEnergy, gcRowDecoder.writeDynamicEnergy, gcRowDecoder.leakage,
+						bitlineMuxDecoder.readDynamicEnergy, bitlineMuxDecoder.writeDynamicEnergy,
+						bitlineMuxDecoder.leakage,
+						senseAmpMuxLev1Decoder.readDynamicEnergy, senseAmpMuxLev1Decoder.writeDynamicEnergy,
+						senseAmpMuxLev1Decoder.leakage,
+						senseAmpMuxLev2Decoder.readDynamicEnergy, senseAmpMuxLev2Decoder.writeDynamicEnergy,
+						senseAmpMuxLev2Decoder.leakage,
+						precharger.readDynamicEnergy, precharger.writeDynamicEnergy, precharger.leakage,
+						writecharger.readDynamicEnergy, writecharger.writeDynamicEnergy, writecharger.leakage,
+						bitlineMux.readDynamicEnergy, bitlineMux.writeDynamicEnergy, bitlineMux.leakage,
+						senseAmp.readDynamicEnergy, senseAmp.writeDynamicEnergy, senseAmp.leakage,
+						senseAmpMuxLev1.readDynamicEnergy, senseAmpMuxLev1.writeDynamicEnergy,
+						senseAmpMuxLev1.leakage,
+						senseAmpMuxLev2.readDynamicEnergy, senseAmpMuxLev2.writeDynamicEnergy,
+						senseAmpMuxLev2.leakage,
+						readDynamicEnergy, writeDynamicEnergy, refreshDynamicEnergy, leakage})) {
+			cout << "[Mat] Error: gcDRAM component energy or leakage is invalid." << endl;
+			invalid = true;
+			readDynamicEnergy = writeDynamicEnergy = refreshDynamicEnergy = leakage = invalid_value;
+		}
 	}
 }
 
@@ -1383,103 +1814,4 @@ void Mat::CalculateRepeater(int numCol){
 	inputParameter->optNumRepeaters[int(log2(numCol))] = optNumber;
 	inputParameter->optSizeRepeaters[int(log2(numCol))] = optSize;
 	
-}
-
-Mat & Mat::operator=(const Mat &rhs) {
-	//cout << "[PROGRESS] Line 1333 :: Mat.cc" << endl;
-	height = rhs.height;
-	width = rhs.width;
-	area = rhs.area;
-	readLatency = rhs.readLatency;
-	writeLatency = rhs.writeLatency;
-	readDynamicEnergy = rhs.readDynamicEnergy;
-	writeDynamicEnergy = rhs.writeDynamicEnergy;
-	resetLatency = rhs.resetLatency;
-	setLatency = rhs.setLatency;
-    refreshLatency = rhs.refreshLatency;
-	resetDynamicEnergy = rhs.resetDynamicEnergy;
-	setDynamicEnergy = rhs.setDynamicEnergy;
-    refreshDynamicEnergy = rhs.refreshDynamicEnergy;
-	cellReadEnergy = rhs.cellReadEnergy;
-	cellResetEnergy = rhs.cellResetEnergy;
-	cellSetEnergy = rhs.cellSetEnergy;
-	leakage = rhs.leakage;
-	initialized = rhs.initialized;
-	numRow = rhs.numRow;
-	numColumn = rhs.numColumn;
-	multipleRowPerSet = rhs.multipleRowPerSet;
-	split = rhs.split;
-	muxSenseAmp = rhs.muxSenseAmp;
-	internalSenseAmp = rhs.internalSenseAmp;
-	muxOutputLev1 = rhs.muxOutputLev1;
-	muxOutputLev2 = rhs.muxOutputLev2;
-	areaOptimizationLevel = rhs.areaOptimizationLevel;
-    num3DLevels = rhs.num3DLevels;
-
-	voltageSense = rhs.voltageSense;
-	senseVoltage = rhs.senseVoltage;
-	numSenseAmp = rhs.numSenseAmp;
-	lenWordline = rhs.lenWordline;
-	lenBitline = rhs.lenBitline;
-	capWordline = rhs.capWordline;
-	capBitline = rhs.capBitline;
-	resWordline = rhs.resWordline;
-	resBitline = rhs.resBitline;
-	resCellAccess = rhs.resCellAccess;
-	capCellAccess = rhs.capCellAccess;
-	bitlineDelay = rhs.bitlineDelay;
-	chargeLatency = rhs.chargeLatency;
-	columnDecoderLatency = rhs.columnDecoderLatency;
-	bitlineDelayOn = rhs.bitlineDelayOn;
-	bitlineDelayOff = rhs.bitlineDelayOff;
-	resInSerialForSenseAmp = rhs.resInSerialForSenseAmp;
-	resEquivalentOn = rhs.resEquivalentOn;
-	resEquivalentOff = rhs.resEquivalentOff;
-	resMemCellOff = rhs.resMemCellOff;
-	resMemCellOn = rhs.resMemCellOn;
-	capWordlineRead = rhs.capWordlineRead;
-	capBitlineRead = rhs.capBitlineRead;
-	
-	gcRowDecoder = rhs.gcRowDecoder;
-	rowDecoder = rhs.rowDecoder;
-
-	bitlineMuxDecoder = rhs.bitlineMuxDecoder;
-	bitlineMux = rhs.bitlineMux;
-	senseAmpMuxLev1Decoder = rhs.senseAmpMuxLev1Decoder;
-	senseAmpMuxLev1 = rhs.senseAmpMuxLev1;
-	senseAmpMuxLev2Decoder = rhs.senseAmpMuxLev2Decoder;
-	senseAmpMuxLev2 = rhs.senseAmpMuxLev2;
-	precharger = rhs.precharger;
-	senseAmp = rhs.senseAmp;
-	widthInvN = rhs.widthInvN;
-	widthInvP = rhs.widthInvP;
-	wInv = rhs.wInv;
-	hInv = rhs.hInv;
-	drivecapin = rhs.drivecapin;
-	drivecapout = rhs.drivecapout;
-	sectionres = rhs.sectionres;
-	sectioncap = rhs.sectioncap;
-	sectionresMux = rhs.sectionresMux;
-	sectioncapMux = rhs.sectioncapMux;
-	targetdriveres = rhs.targetdriveres;
-	activityRowRead = rhs.activityRowRead;
-	activityRowWrite = rhs.activityRowWrite;
-	gateCapRep = rhs.gateCapRep;
-	numRepeaters = rhs.numRepeaters;
-	bufferSizeRatio = rhs.bufferSizeRatio;
-	readBitlineDelay = rhs.readBitlineDelay;
-	writeBitlineDelay = rhs.writeBitlineDelay;
-	writecharger = rhs.writecharger;
-
-	tsvArray = rhs.tsvArray;
-	logicArea = rhs.logicArea;
-	logicWidth = rhs.logicWidth;
-	logicHeight = rhs.logicHeight;
-	memoryArea = rhs.memoryArea;
-	memoryWidth = rhs.memoryWidth;
-	memoryHeight = rhs.memoryHeight;
-	areaRatio = rhs.areaRatio;
-	stackedMemTiers = rhs.stackedMemTiers;
-	//cout << "[PROGRESS] Line 1423 :: Mat.cc" << endl;
-	return *this;
 }

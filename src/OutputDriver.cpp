@@ -11,9 +11,28 @@
 #include "formula.h"
 #include <math.h>
 
-OutputDriver::OutputDriver() : FunctionUnit(){
-	initialized = false;
-	invalid = false;
+OutputDriver::OutputDriver()
+	: FunctionUnit(),
+	  initialized(false),
+	  invalid(false),
+	  logicEffort(0),
+	  inputCap(0),
+	  outputCap(0),
+	  outputRes(0),
+	  addRepeaters(false),
+	  inv(false),
+	  numStage(0),
+	  areaOptimizationLevel(latency_first),
+	  minDriverCurrent(0),
+	  widthNMOS{},
+	  widthPMOS{},
+	  capInput{},
+	  capOutput{},
+	  rampInput(0),
+	  rampOutput(0),
+	  unitLatencyRep(0),
+	  unitLatencyWire(0),
+	  wireLength(0) {
 }
 
 OutputDriver::~OutputDriver() {
@@ -34,6 +53,7 @@ void OutputDriver::Initialize(double _logicEffort, double _inputCap, double _out
 	minDriverCurrent = _minDriverCurrent;
 	addRepeaters = _addRepeaters;
 	wireLength = _wireLength;
+	invalid = false;
 
 	// NSCACHE_UNUSED_KEEP: retained for possible mux-aware driver sizing.
 	// double sizingfactor_MUX = 1;
@@ -61,40 +81,46 @@ void OutputDriver::Initialize(double _logicEffort, double _inputCap, double _out
 			optimalNumStage = MAX_INV_CHAIN_LEN;
 		}
 
-			numStage = optimalNumStage;
-			
+		numStage = optimalNumStage;
 
-		double f = pow(F, 1.0 / (optimalNumStage + 1));	/* Logic effort per stage */
-		double inputCapLast = outputCap / f;
-
-		widthNMOS[optimalNumStage-1] = MAX(MIN_NMOS_SIZE * tech->featureSize,
-				inputCapLast / CalculateGateCap(1/*meter*/, *tech) / (1.0 + tech->pnSizeRatio));
-
-		if (widthNMOS[optimalNumStage-1] > inputParameter->maxNmosSize * tech->featureSize /*|| _MUX*/) {
-			if (WARNING)
-				cout << "[WARNING] Exceed maximum NMOS size!" << endl;
-			widthNMOS[optimalNumStage-1] = inputParameter->maxNmosSize * tech->featureSize;
-			/* re-Calculate the logic effort */
-			double capLastStage = CalculateGateCap((1 + tech->pnSizeRatio) * inputParameter->maxNmosSize * tech->featureSize, *tech);
-			F = logicEffort * capLastStage / inputCap;
-			f =	pow(F, 1.0 / (optimalNumStage));
-		}
-
-		if (widthNMOS[optimalNumStage-1] < minNMOSDriverWidth) {
-			/* the last level Inv can not provide minimum current so that the Inv chain can't only decided by Logic Effort */
-			areaOptimizationLevel = latency_area_trade_off;
+		/* A non-inverting, low-effort path legitimately needs no added inverter.
+		 * Keep that historical zero-stage meaning without indexing stage -1. */
+		if (optimalNumStage == 0) {
+			if (minDriverCurrent > 0)
+				areaOptimizationLevel = latency_area_trade_off;
 		} else {
-			widthPMOS[optimalNumStage-1] = widthNMOS[optimalNumStage-1] * tech->pnSizeRatio;
+			double f = pow(F, 1.0 / (optimalNumStage + 1));	/* Logic effort per stage */
+			double inputCapLast = outputCap / f;
 
-			for (int i = optimalNumStage-2; i >= 0; i--) {
-				widthNMOS[i] = widthNMOS[i+1] / f;
-				if (widthNMOS[i] < MIN_NMOS_SIZE * tech->featureSize) {
-					if (WARNING)
-						cout << "[WARNING] Exceed minimum NMOS size!" << endl;
-					widthNMOS[i] = MIN_NMOS_SIZE * tech->featureSize;
+			widthNMOS[optimalNumStage-1] = MAX(MIN_NMOS_SIZE * tech->featureSize,
+					inputCapLast / CalculateGateCap(1/*meter*/, *tech) / (1.0 + tech->pnSizeRatio));
+
+			if (widthNMOS[optimalNumStage-1] > inputParameter->maxNmosSize * tech->featureSize /*|| _MUX*/) {
+				if (WARNING)
+					cout << "[WARNING] Exceed maximum NMOS size!" << endl;
+				widthNMOS[optimalNumStage-1] = inputParameter->maxNmosSize * tech->featureSize;
+				/* re-Calculate the logic effort */
+				double capLastStage = CalculateGateCap((1 + tech->pnSizeRatio) * inputParameter->maxNmosSize * tech->featureSize, *tech);
+				F = logicEffort * capLastStage / inputCap;
+				f =	pow(F, 1.0 / (optimalNumStage));
+			}
+
+			if (widthNMOS[optimalNumStage-1] < minNMOSDriverWidth) {
+				/* the last level Inv can not provide minimum current so that the Inv chain can't only decided by Logic Effort */
+				areaOptimizationLevel = latency_area_trade_off;
+			} else {
+				widthPMOS[optimalNumStage-1] = widthNMOS[optimalNumStage-1] * tech->pnSizeRatio;
+
+				for (int i = optimalNumStage-2; i >= 0; i--) {
+					widthNMOS[i] = widthNMOS[i+1] / f;
+					if (widthNMOS[i] < MIN_NMOS_SIZE * tech->featureSize) {
+						if (WARNING)
+							cout << "[WARNING] Exceed minimum NMOS size!" << endl;
+						widthNMOS[i] = MIN_NMOS_SIZE * tech->featureSize;
+					}
+					widthPMOS[i] = widthNMOS[i] * tech->pnSizeRatio;
+					EnlargeSize(&widthNMOS[i], &widthPMOS[i], tech->featureSize * MAX_TRANSISTOR_HEIGHT, *tech);
 				}
-				widthPMOS[i] = widthNMOS[i] * tech->pnSizeRatio;
-				EnlargeSize(&widthNMOS[i], &widthPMOS[i], tech->featureSize * MAX_TRANSISTOR_HEIGHT, *tech);
 			}
 		}
 	}
@@ -228,6 +254,9 @@ void OutputDriver::CalculateLatency(double _rampInput) {
 		cout << "[Output Driver] Error: Require initialization first!" << endl;
 	} else if (invalid) {
 		readLatency = writeLatency = invalid_value;
+	} else if (numStage == 0) {
+		rampInput = rampOutput = _rampInput;
+		readLatency = writeLatency = 0;
 	} else {
 		rampInput = _rampInput;
 		double resPullDown;
@@ -278,6 +307,8 @@ void OutputDriver::CalculatePower() {
 		cout << "[Output Driver] Error: Require initialization first!" << endl;
 	} else if (invalid) {
 		readDynamicEnergy = writeDynamicEnergy = leakage = invalid_value;
+	} else if (numStage == 0) {
+		readDynamicEnergy = writeDynamicEnergy = leakage = 0;
 	} else {
 		/* Leakage power */
 		leakage = 0;
@@ -319,35 +350,4 @@ void OutputDriver::PrintProperty() {
 	cout << "Number of inverter stage: " << numStage << endl;
 }
 
-OutputDriver & OutputDriver::operator=(const OutputDriver &rhs) {
-	//cout << "[PROGRESS] Line 322 :: OutputDriver.cc" << endl;
-	height = rhs.height;
-	width = rhs.width;
-	area = rhs.area;
-	readLatency = rhs.readLatency;
-	writeLatency = rhs.writeLatency;
-	readDynamicEnergy = rhs.readDynamicEnergy;
-	writeDynamicEnergy = rhs.writeDynamicEnergy;
-	resetLatency = rhs.resetLatency;
-	setLatency = rhs.setLatency;
-	resetDynamicEnergy = rhs.resetDynamicEnergy;
-	setDynamicEnergy = rhs.setDynamicEnergy;
-	cellReadEnergy = rhs.cellReadEnergy;
-	cellSetEnergy = rhs.cellSetEnergy;
-	cellResetEnergy = rhs.cellResetEnergy;
-	leakage = rhs.leakage;
-	initialized = rhs.initialized;
-	invalid = rhs.invalid;
-	logicEffort = rhs.logicEffort;
-	inputCap = rhs.inputCap;
-	outputCap = rhs.outputCap;
-	outputRes = rhs.outputRes;
-	inv = rhs.inv;
-	numStage = rhs.numStage;
-	areaOptimizationLevel = rhs.areaOptimizationLevel;
-	minDriverCurrent = rhs.minDriverCurrent;
-	rampInput = rhs.rampInput;
-	rampOutput = rhs.rampOutput;
-
-	return *this;
-}
+OutputDriver & OutputDriver::operator=(const OutputDriver &rhs) = default;

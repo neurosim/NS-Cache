@@ -104,6 +104,15 @@ void SubArray::Initialize(int _numRowMat, int _numColumnMat, int _numAddressBit,
 	numColumn *= muxSenseAmp * muxOutputLev1 * muxOutputLev2;
 	if (memoryType == MemoryType::tag)
 		numColumn *= numWay;
+	/* The legacy override rewrote derived dimensions and could corrupt capacity
+	 * or tag addressing.  Forcing a MAT now only filters derived data candidates. */
+	if (memoryType == MemoryType::data && inputParameter->forceMatSize
+			&& (static_cast<uint64_t>(numRow) != inputParameter->forcedMatRows
+					|| static_cast<uint64_t>(numColumn) != inputParameter->forcedMatColumns)) {
+		invalid = true;
+		initialized = true;
+		return;
+	}
 
 	mat.Initialize(numRow, numColumn, numRowPerSet > 1, true /* TO-DO: need to correct */,
 			muxSenseAmp, internalSenseAmp, muxOutputLev1, muxOutputLev2, areaOptimizationLevel, monolithicStackCount);
@@ -114,6 +123,11 @@ void SubArray::Initialize(int _numRowMat, int _numColumnMat, int _numAddressBit,
 		return;
 	}
 	mat.CalculateArea();	/* the area needs to be calculated during the initialization because the size dimension needs to be called by others */
+	if (mat.invalid) {
+		invalid = true;
+		initialized = true;
+		return;
+	}
 
 	int numAddressRowPredecoderBlock1 = _numAddressBit - (int)(log2(muxSenseAmp * muxOutputLev1 * muxOutputLev2)+0.1);	/* The address bit on row decodeing */
 	if (numAddressRowPredecoderBlock1 < 0) {
@@ -314,6 +328,11 @@ void SubArray::CalculateLatency(double _rampInput) {
 
 		/* Caluclate mat latency */
 		mat.CalculateLatency(MIN(rowPredecoderBlock1.rampOutput, rowPredecoderBlock2.rampOutput));
+		if (mat.invalid) {
+			invalid = true;
+			readLatency = writeLatency = refreshLatency = invalid_value;
+			return;
+		}
 
 		/* Add them together */
 		readLatency = predecoderLatency + mat.readLatency;
@@ -347,6 +366,11 @@ void SubArray::CalculatePower() {
 		senseAmpMuxLev2PredecoderBlock1.CalculatePower();
 		senseAmpMuxLev2PredecoderBlock2.CalculatePower();
 		mat.CalculatePower();
+		if (mat.invalid) {
+			invalid = true;
+			readDynamicEnergy = writeDynamicEnergy = refreshDynamicEnergy = leakage = invalid_value;
+			return;
+		}
 
 		readDynamicEnergy = rowPredecoderBlock1.readDynamicEnergy + rowPredecoderBlock2.readDynamicEnergy
 				+ bitlineMuxPredecoderBlock1.readDynamicEnergy + bitlineMuxPredecoderBlock2.readDynamicEnergy

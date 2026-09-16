@@ -10,10 +10,27 @@
 #include "formula.h"
 #include "global.h"
 
-Precharger::Precharger() {
-	// TODO Auto-generated constructor stub
-	initialized = false;
-	enableLatency = 0;
+Precharger::Precharger()
+	: FunctionUnit(),
+	  initialized(false),
+	  outputDriver(),
+	  voltagePrecharge(0),
+	  capBitline(0),
+	  resBitline(0),
+	  capLoadInv(0),
+	  capOutputBitlinePrecharger(0),
+	  capWireLoadPerColumn(0),
+	  resWireLoadPerColumn(0),
+	  enableLatency(0),
+	  numColumn(0),
+	  widthPMOSBitlinePrecharger(0),
+	  widthPMOSBitlineEqual(0),
+	  widthInvNmos(0),
+	  widthInvPmos(0),
+	  capLoadPerColumn(0),
+	  rampInput(0),
+	  rampOutput(0),
+	  wireLength(0) {
 }
 
 Precharger::~Precharger() {
@@ -137,40 +154,4 @@ void Precharger::PrintProperty() {
 	FunctionUnit::PrintProperty();
 }
 
-Precharger & Precharger::operator=(const Precharger &rhs) {
-	//cout << "[PROGRESS] Line 141 :: Precharger.cc" << endl;
-	height = rhs.height;
-	width = rhs.width;
-	area = rhs.area;
-	readLatency = rhs.readLatency;
-	writeLatency = rhs.writeLatency;
-    refreshLatency = rhs.refreshLatency;
-	readDynamicEnergy = rhs.readDynamicEnergy;
-	writeDynamicEnergy = rhs.writeDynamicEnergy;
-    refreshDynamicEnergy = rhs.refreshDynamicEnergy;
-	resetLatency = rhs.resetLatency;
-	setLatency = rhs.setLatency;
-	resetDynamicEnergy = rhs.resetDynamicEnergy;
-	setDynamicEnergy = rhs.setDynamicEnergy;
-	cellReadEnergy = rhs.cellReadEnergy;
-	cellSetEnergy = rhs.cellSetEnergy;
-	cellResetEnergy = rhs.cellResetEnergy;
-	leakage = rhs.leakage;
-	initialized = rhs.initialized;
-	outputDriver = rhs.outputDriver;
-	capBitline = rhs.capBitline;
-	resBitline = rhs.resBitline;
-	capLoadInv = rhs.capLoadInv;
-	capOutputBitlinePrecharger = rhs.capOutputBitlinePrecharger;
-	capWireLoadPerColumn = rhs.capWireLoadPerColumn;
-	resWireLoadPerColumn = rhs.resWireLoadPerColumn;
-	enableLatency = rhs.enableLatency;
-	numColumn = rhs.numColumn;
-	widthPMOSBitlinePrecharger = rhs.widthPMOSBitlinePrecharger;
-	widthPMOSBitlineEqual = rhs.widthPMOSBitlineEqual;
-	capLoadPerColumn = rhs.capLoadPerColumn;
-	rampInput = rhs.rampInput;
-	rampOutput = rhs.rampOutput;
-
-	return *this;
-}
+Precharger & Precharger::operator=(const Precharger &rhs) = default;

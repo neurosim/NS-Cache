@@ -1,0 +1,5 @@
+# Synthetic fixture used only to verify explicit rejection of unfinished MLC NAND.
+-MemCellType: MLCNAND
+-ProcessNode: 45
+-CellArea (F^2): 4
+-CellAspectRatio: 1

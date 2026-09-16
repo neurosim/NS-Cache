@@ -61,8 +61,13 @@ public:
 	bool isPruningEnabled;			/* Whether to prune the results during the exploration */
 	bool useCactiAssumption;		/* Use the CACTI assumptions on the array organization */
 	bool relaxSRAMCell;				/* Use Cell Relaxation scheme from NeuroSim*/
+	double bankAspectRatioLimit;	/* Maximum data-bank aspect ratio; zero disables the limit */
+	bool forceMatSize;				/* Constrain data-array candidates to one exact MAT size */
+	uint64_t forcedMatRows;
+	uint64_t forcedMatColumns;
+	double dramTargetResidualRatio;	/* Residual fraction used by DRAM restore/write timing */
 	bool validated;					/* Use validated tuning from NeuroSim*/
-	int maxMatLayers;				/* Place limitation on the maximum number of Mat Layers in M3D */
+	int maxMatLayers;				/* Exact ceiling on the number of Mat layers in M3D */
 	double clockFreq;				/* For Gem5 Translation, What is the Clock Frequency? Units: Hz */
 	bool quantize;					/* For Gem5 Translation, Does the User want Quantized Parameters? */
 
@@ -144,6 +149,9 @@ public:
 	float optSizeRepeaters[25];
 
     int printLevel;
+
+private:
+	void ValidateInputParameter(const std::string & inputFile) const;
 };
 
 #endif /* INPUTPARAMETER_H_ */

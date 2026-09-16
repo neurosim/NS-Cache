@@ -10,32 +10,46 @@
 #include <cassert>
 
 TSV::TSV()
+    : FunctionUnit(),
+      res(0),
+      cap(0),
+      C_load_TSV(0),
+      min_area(0),
+      F(0),
+      num_gates(0),
+      w_TSV_n{},
+      w_TSV_p{},
+      numTotalBits(0),
+      numAccessBits(0),
+      numReadBits(0),
+      numDataBits(0),
+      TSV_metal_area(0),
+      buffer_area(0),
+      buffer_area_height(0),
+      buffer_area_width(0),
+      tsv_type(0),
+      initialized(false),
+      invalid(true)
 {
-    for (int i = 0; i < MAX_NUMBER_GATES_STAGE; i++) {
-        w_TSV_n[i] = 0;
-        w_TSV_p[i] = 0;
-    }
-
-    numTotalBits = 0;
-    numAccessBits = 0;
-
-    initialized = false;
-    invalid = true;
 }
 
 TSV::~TSV()
 {
 }
 
-void TSV::Initialize(TSV_type tsv_type, bool buffered)
+void TSV::Initialize(TSV_type requestedType, bool buffered)
 {
     int num_gates_min = 1;
     double min_w_pmos = tech->pnSizeRatio * MIN_NMOS_SIZE * tech->featureSize;
+    tsv_type = static_cast<unsigned int>(requestedType);
+    invalid = false;
     num_gates = 1;
+    C_load_TSV = 0;
+    F = 0;
 
-    cap = tech->capTSV[tsv_type];
-    res = tech->resTSV[tsv_type];
-    min_area = tech->areaTSV[tsv_type] * 1e-12;
+    cap = tech->capTSV[requestedType];
+    res = tech->resTSV[requestedType];
+    min_area = tech->areaTSV[requestedType] * 1e-12;
 
     if (!buffered) {
         num_gates = 0;
@@ -114,10 +128,15 @@ void TSV::CalculateArea()
     TSV_metal_area = min_area * 3.1416/16;
 
     // TODO -- Understand this better
-    if( buffer_area < (min_area - TSV_metal_area) )
+    if( buffer_area < (min_area - TSV_metal_area) ) {
         area = min_area;
-    else
+    } else {
         area = buffer_area + TSV_metal_area;
+    }
+
+    /* The M3D Mat model uses the lateral MIV footprint as a wire-length term.
+     * Represent the scalar per-MIV footprint as the assumed square geometry. */
+    width = height = std::sqrt(area);
 
 }
 
@@ -215,48 +234,4 @@ void TSV::_CalculateLatencyAndPower(double _rampInput, double &_dynamicEnergy, d
     }
 }
 
-TSV& TSV::operator=(const TSV& rhs) {
-	height = rhs.height;
-	width = rhs.width;
-	area = rhs.area;
-
-	readLatency = rhs.readLatency;
-	writeLatency = rhs.writeLatency;
-	readDynamicEnergy = rhs.readDynamicEnergy;
-	writeDynamicEnergy = rhs.writeDynamicEnergy;
-	resetLatency = rhs.resetLatency;
-	setLatency = rhs.setLatency;
-
-	resetDynamicEnergy = rhs.resetDynamicEnergy;
-	setDynamicEnergy = rhs.setDynamicEnergy;
-	cellReadEnergy = rhs.cellReadEnergy;
-	cellSetEnergy = rhs.cellSetEnergy;
-	cellResetEnergy = rhs.cellResetEnergy;
-	leakage = rhs.leakage;
-
-    res = rhs.res;
-    cap = rhs.cap;
-    C_load_TSV = rhs.C_load_TSV;
-    min_area = rhs.min_area; 
-    F = rhs.F;
-
-    num_gates = rhs.num_gates;
-    memcpy(w_TSV_n, rhs.w_TSV_n, sizeof(double)*MAX_NUMBER_GATES_STAGE);
-    memcpy(w_TSV_p, rhs.w_TSV_p, sizeof(double)*MAX_NUMBER_GATES_STAGE);
-    numTotalBits = rhs.numTotalBits;
-    numAccessBits = rhs.numAccessBits;
-    numReadBits = rhs.numReadBits;
-    numDataBits = rhs.numDataBits;
-
-    TSV_metal_area = rhs.TSV_metal_area;
-    buffer_area = rhs.buffer_area;
-    buffer_area_height = rhs.buffer_area_height;
-    buffer_area_width = rhs.buffer_area_width;
-
-    tsv_type = rhs.tsv_type;
-    initialized = rhs.initialized;
-    invalid = rhs.invalid;
-
-    return *this;
-}
-
+TSV& TSV::operator=(const TSV& rhs) = default;

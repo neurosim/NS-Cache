@@ -1,0 +1,12 @@
+/nsc
+/nsc-debug
+/nsc-strict
+/nsc-asan
+/nsc-ubsan
+/src/obj/
+/src/obj-debug/
+/src/obj-strict/
+/src/obj-asan/
+/src/obj-ubsan/
+/tests/__pycache__/
+*.pyc

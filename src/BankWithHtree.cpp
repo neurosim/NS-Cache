@@ -505,6 +505,11 @@ void BankWithHtree::CalculateArea() {
 		height = width = area = invalid_value;
 	} else {
 		subarray.CalculateArea();
+		if (subarray.invalid) {
+			invalid = true;
+			height = width = area = invalid_value;
+			return;
+		}
 		height = subarray.height * numRowSubArray;
 		width = subarray.width * numColumnSubArray;
 
@@ -530,9 +535,12 @@ void BankWithHtree::CalculateArea() {
 					numVerticalDataBroadcastBitToRoute[i]) * numVerticalWire[i] / numWireSharingWidth) * effectivePitch;
 		}
 
-		/* Determine if the aspect ratio meets the constraint */
+		/* This was historically a fixed ratio of three.  Keep that default,
+		 * but use the validated common control for both bank routers. */
 		if (memoryType == MemoryType::data)
-			if (height / width > CONSTRAINT_ASPECT_RATIO_BANK || width / height > CONSTRAINT_ASPECT_RATIO_BANK) {
+			if (inputParameter->bankAspectRatioLimit > 0
+					&& (height / width > inputParameter->bankAspectRatioLimit
+							|| width / height > inputParameter->bankAspectRatioLimit)) {
 				/* illegal */
 				invalid = true;
 				height = width = area = invalid_value;
@@ -637,7 +645,19 @@ void BankWithHtree::CalculateLatencyAndPower() {
 		int beta = 1;	/* Default value is 1. For fast access mode cache, this value is equal to associativity, which means only 1/beta interconnect wires are activated */
 
 		subarray.CalculateLatency(infinite_ramp);
+		if (subarray.invalid) {
+			invalid = true;
+			readLatency = writeLatency = refreshLatency = invalid_value;
+			readDynamicEnergy = writeDynamicEnergy = refreshDynamicEnergy = leakage = invalid_value;
+			return;
+		}
 		subarray.CalculatePower();
+		if (subarray.invalid) {
+			invalid = true;
+			readLatency = writeLatency = refreshLatency = invalid_value;
+			readDynamicEnergy = writeDynamicEnergy = refreshDynamicEnergy = leakage = invalid_value;
+			return;
+		}
 		readLatency = subarray.readLatency;
 		writeLatency = subarray.writeLatency;
 		//readLatency = 1/(((subarray.numRowMat * subarray.numColumnMat * subarray.mat.numColumn) /  subarray.mat.readLatency) / area);
@@ -772,7 +792,7 @@ void BankWithHtree::CalculateLatencyAndPower() {
         }
 	}
 
-    if (cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
+    if (cell->memCellType == DRAM || cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
         if (refreshLatency > cell->retentionTime) {
             invalid = true;
         }
