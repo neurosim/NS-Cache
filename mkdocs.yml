@@ -8,5 +8,22 @@ edit_uri: edit/main/docs/
 theme:
   name: readthedocs
 
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - attr_list
+
 nav:
-  - Home: index.md
+  - Overview: index.md
+  - User guide:
+      - Running NS-Cache: getting-started.md
+      - Configuration: configuration.md
+  - Architecture and operation:
+      - DESTINY inheritance and objects: architecture.md
+      - Functional model and results: functionality.md
+  - Model options:
+      - Monolithic 3D: models/monolithic-3d.md
+      - Transistor technology: models/transistor-technology.md
+      - AOS devices: models/aos.md
+  - References: references.md

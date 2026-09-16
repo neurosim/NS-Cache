@@ -1,0 +1,30 @@
+img.homepage-logo {
+    display: block;
+    margin: 1.5rem auto;
+}
+
+/* Configuration descriptions should wrap instead of forcing horizontal scrolling. */
+.wy-table-responsive table {
+    width: 100%;
+}
+
+.wy-table-responsive table th,
+.wy-table-responsive table td {
+    white-space: normal;
+    vertical-align: top;
+}
+
+.wy-table-responsive table code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* Keep paper figures compact; their links retain the full-resolution images. */
+img.paper-figure {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: min(100%, 480px);
+    max-height: 360px;
+    margin: 1rem auto;
+}
