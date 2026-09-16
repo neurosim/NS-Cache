@@ -17,7 +17,7 @@ If you use the tool or adapt the tool in your work or publication, please cite t
 * F. Waqar, J. Kwak, J. Lee, M. Shon, O. Phadke, M. Gholamrezaei, K. Skadron, S. Yu, ※Optimization and Benchmarking of Monolithically Stackable Gain Cell Memory for Last-Level Cache, *§ IEEE Transactions Computers (T-Computer), 2025.*
 10.1109/TC.2025.3625490
 
-:star2: This is the released version 1.1.0 (December, 2025) for the tool, and this version has **FinFET and Nanosheet generation technology integration, Peripheral circuit extensions, Gain-Cell parameterization and modifications for the Gem5 ecosystem**:. NS-Cache is currently a work-in-progress project in its initial iteration. Future releases will include improved documentation, tuned temperature variability models, and accessible technology extensions (i.e. amorphous oxide transistors).
+:star2: This is the released version 2.0.0 (August, 2026) for the tool, and this version has **FinFET and Nanosheet generation technology integration, Peripheral circuit extensions, Gain-Cell parameterization and modifications for the Gem5 ecosystem, Documentation prep and a mutable AOS C++ model extention**:. NS-Cache is currently a work-in-progress project in its intermediate iteration. Future releases tuned temperature variability models, and more accessible technology extensions.
 
 ```
 The following is a list of the supported nodes with key features:
@@ -61,7 +61,7 @@ make clean -C src/
 ```
 
 ### Starter Tips
-(1) Example configurations can be found in `config` in the home directory. The subdirectory `New_Configs` contains new cell definitions (`.cell`) and configurations (`.cfg`) for FinFET generation SRAM nodes, Heterogeneous 3D (H3D) and Monolithic 3D (M3D)* cache designs, and a Gain-Cell Design for those looking to get started. The subdirectory `Old_Configs` contains Destiny configurations (still compatible with NS-Cache). * The M3D flag does not replace the transistor technology. The user must specify what M3D memory properties are by adding cell/technology parameters.
+(1) Example configurations can be found in `config` in the home directory. The subdirectory `New_Configs` contains new cell definitions (`.cell`) and configurations (`.cfg`) for FinFET generation SRAM nodes, Heterogeneous 3D (H3D) and Monolithic 3D (M3D)* cache designs, and a Gain-Cell Design for those looking to get started. The subdirectory `Old_Configs` contains Destiny configurations (still compatible with NS-Cache).
 
 (2) Looking to understand the set of available parameters? Check out `inputParameter.cpp` and `inputParameter.h` for configuration parameters. Check out `MemCell.cpp` and `MemCell.h` for cell definition parameters available in NS-Cache.
 
