@@ -698,14 +698,14 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 		if (!IsFinitePositive(tech->vdd) || !IsFinitePositive(capBitline)
 				|| !IsFiniteNonNegative(resBitline) || !IsFiniteNonNegative(lenBitline)
 				|| numColumn <= 0 || numColumn > std::numeric_limits<int>::max()) {
-			cout << "[Mat] Error: Invalid gcDRAM write-charger voltage, capacitance, resistance, length, or column count." << endl;
+			cout << "[Mat] Error: Invalid gcDRAM write-driver voltage, capacitance, resistance, length, or column count." << endl;
 			invalid = true;
 			initialized = true;
 			return;
 		}
-		writecharger.Initialize(tech->vdd, static_cast<int>(numColumn), capBitline,
+		writeDriver.Initialize(tech->vdd, static_cast<int>(numColumn), capBitline,
 				resBitline, lenBitline);
-		writecharger.CalculateRC();
+		writeDriver.CalculateRC();
 	}
 
 	if (!invalid) {
@@ -781,13 +781,13 @@ void Mat::CalculateArea() {
 			}
 
 			// Write Drivers
-			writecharger.CalculateArea();
-			if (writecharger.width > width) {
+			writeDriver.CalculateArea();
+			if (writeDriver.width > width) {
 				/* assume magic folding */
-				addHeight += writecharger.area / writecharger.width;
+				addHeight += writeDriver.area / writeDriver.width;
 			} else {
 				/* allow white space */
-				addHeight += writecharger.height;
+				addHeight += writeDriver.height;
 			}
 		}
 
@@ -835,7 +835,7 @@ void Mat::CalculateArea() {
 					+ bitlineMux.area + senseAmp.area + senseAmpMuxLev1.area + senseAmpMuxLev2.area
 					+ bitlineMuxDecoder.area + senseAmpMuxLev1Decoder.area + senseAmpMuxLev2Decoder.area;
 			if (cell->memCellType == gcDRAM)
-				m3d.peripheralLogicArea += gcRowDecoder.area + writecharger.area;
+				m3d.peripheralLogicArea += gcRowDecoder.area + writeDriver.area;
 			if (!IsFinitePositive(m3d.peripheralLogicArea) || !IsFiniteNonNegative(tsvArray.area)) {
 				invalid = true;
 				height = width = area = invalid_value;
@@ -959,8 +959,8 @@ void Mat::CalculateArea() {
 			if (cell->memCellType == gcDRAM) {
 				gcRowDecoder.capLoad = gcRowDecoder.outputDriver.outputCap = capWordlineRead;
 				gcRowDecoder.resLoad = gcRowDecoder.outputDriver.outputRes = resWordline;
-				writecharger.capBitline = capBitline;
-				writecharger.resBitline = resBitline;
+				writeDriver.capBitline = capBitline;
+				writeDriver.resBitline = resBitline;
 			}
 			if (cell->memCellType == DRAM || cell->memCellType == eDRAM) {
 				const double sharingCap = cell->capDRAMCell + capBitline;
@@ -1170,7 +1170,7 @@ void Mat::CalculateLatency(double _rampInput) {
 			}
 		} else if (cell->memCellType == gcDRAM) {
 			gcRowDecoder.CalculateLatency(_rampInput);
-			writecharger.CalculateLatency(_rampInput);
+			writeDriver.CalculateLatency(_rampInput);
 
 			decoderLatency = MAX(rowDecoder.readLatency, columnDecoderLatency);
 			gcDecoderLatency = MAX(gcRowDecoder.readLatency, columnDecoderLatency);
@@ -1242,10 +1242,10 @@ void Mat::CalculateLatency(double _rampInput) {
 
 
             /* Refresh operation has seperated paths*/
-            refreshLatency = gcDecoderLatency + decoderLatency + readBitlineDelay + senseAmp.readLatency + writecharger.readLatency + writeBitlineDelay;
+            refreshLatency = gcDecoderLatency + decoderLatency + readBitlineDelay + senseAmp.readLatency + writeDriver.readLatency + writeBitlineDelay;
             refreshLatency *= (numRow);
 
-			writeLatency = decoderLatency + writeBitlineDelay + writecharger.readLatency;
+			writeLatency = decoderLatency + writeBitlineDelay + writeDriver.readLatency;
 			readLatency = gcDecoderLatency + readBitlineDelay + senseAmp.readLatency
 					+ senseAmpMuxLev1.readLatency + senseAmpMuxLev2.readLatency + precharger.readLatency;
 			if (!AreFiniteNonNegative({
@@ -1256,7 +1256,7 @@ void Mat::CalculateLatency(double _rampInput) {
 					senseAmpMuxLev1Decoder.readLatency, senseAmpMuxLev1Decoder.writeLatency,
 					senseAmpMuxLev2Decoder.readLatency, senseAmpMuxLev2Decoder.writeLatency,
 					precharger.readLatency, precharger.writeLatency,
-					writecharger.readLatency, writecharger.writeLatency,
+					writeDriver.readLatency, writeDriver.writeLatency,
 					bitlineMux.readLatency, bitlineMux.writeLatency,
 					senseAmp.readLatency, senseAmp.writeLatency,
 					senseAmpMuxLev1.readLatency, senseAmpMuxLev1.writeLatency,
@@ -1430,7 +1430,7 @@ void Mat::CalculatePower() {
 			}
 		} else if (cell->memCellType == gcDRAM) {
 			gcRowDecoder.CalculatePower();
-			writecharger.CalculatePower();
+			writeDriver.CalculatePower();
 			/* Split read/write bitlines and storage-node loading are accounted
 			 * independently before peripheral energy is added below. */
 			readDynamicEnergy = (capReadCellAccess + capBitlineRead
@@ -1609,10 +1609,10 @@ void Mat::CalculatePower() {
 				+ senseAmp.writeDynamicEnergy + senseAmpMuxLev1.writeDynamicEnergy + senseAmpMuxLev2.writeDynamicEnergy;
 
 		if (cell->memCellType == gcDRAM) {
-			gcDramPower.writeChargeDriverEnergy = writecharger.readDynamicEnergy;
-			writeDynamicEnergy += gcDramPower.writeChargeDriverEnergy;
+			gcDramPower.writeDriverEnergy = writeDriver.readDynamicEnergy;
+			writeDynamicEnergy += gcDramPower.writeDriverEnergy;
 			readDynamicEnergy = readDynamicEnergy - rowDecoder.readDynamicEnergy + gcRowDecoder.readDynamicEnergy;
-			leakage += gcRowDecoder.leakage + writecharger.leakage;
+			leakage += gcRowDecoder.leakage + writeDriver.leakage;
 		}
         
 		if (cell->memCellType == gcDRAM) {
@@ -1621,7 +1621,7 @@ void Mat::CalculatePower() {
 			const double refreshEnergyPerRow = gcDramPower.readBitlineAccessEnergy
 					+ gcDramPower.writeBitlineAccessEnergy
 					+ rowDecoder.readDynamicEnergy + gcRowDecoder.readDynamicEnergy
-					+ precharger.readDynamicEnergy + writecharger.readDynamicEnergy
+					+ precharger.readDynamicEnergy + writeDriver.readDynamicEnergy
 					+ senseAmp.readDynamicEnergy;
 			refreshDynamicEnergy = refreshEnergyPerRow * (numRow + 2);
 		} else {
@@ -1662,7 +1662,7 @@ void Mat::CalculatePower() {
 				&& !AreFiniteNonNegative({
 						gcDramPower.readBitlineAccessEnergy,
 						gcDramPower.writeBitlineAccessEnergy,
-						gcDramPower.writeChargeDriverEnergy,
+						gcDramPower.writeDriverEnergy,
 						gcDramPower.aosLeakageUpperBound,
 						rowDecoder.readDynamicEnergy, rowDecoder.writeDynamicEnergy, rowDecoder.leakage,
 						gcRowDecoder.readDynamicEnergy, gcRowDecoder.writeDynamicEnergy, gcRowDecoder.leakage,
@@ -1673,7 +1673,7 @@ void Mat::CalculatePower() {
 						senseAmpMuxLev2Decoder.readDynamicEnergy, senseAmpMuxLev2Decoder.writeDynamicEnergy,
 						senseAmpMuxLev2Decoder.leakage,
 						precharger.readDynamicEnergy, precharger.writeDynamicEnergy, precharger.leakage,
-						writecharger.readDynamicEnergy, writecharger.writeDynamicEnergy, writecharger.leakage,
+						writeDriver.readDynamicEnergy, writeDriver.writeDynamicEnergy, writeDriver.leakage,
 						bitlineMux.readDynamicEnergy, bitlineMux.writeDynamicEnergy, bitlineMux.leakage,
 						senseAmp.readDynamicEnergy, senseAmp.writeDynamicEnergy, senseAmp.leakage,
 						senseAmpMuxLev1.readDynamicEnergy, senseAmpMuxLev1.writeDynamicEnergy,

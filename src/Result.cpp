@@ -125,8 +125,8 @@ void PrintGcDRAMWriteEnergy(ostream &output, int indent, const Mat &mat,
 	if (type == gcDRAM) {
 		output << string(indent, ' ') << "       |--- gcDRAM Write-Bitline/Access Energy = "
 				<< TO_JOULE(mat.gcDramPower.writeBitlineAccessEnergy) << endl;
-		output << string(indent, ' ') << "       |--- gcDRAM Write-Charge-Driver Energy = "
-				<< TO_JOULE(mat.gcDramPower.writeChargeDriverEnergy) << endl;
+		output << string(indent, ' ') << "       |--- gcDRAM Write-Driver Energy = "
+				<< TO_JOULE(mat.gcDramPower.writeDriverEnergy) << endl;
 	}
 }
 
@@ -138,7 +138,7 @@ void PrintGcDRAMRefreshEnergy(ostream &output, int indent, const Mat &mat,
 	const double perRowEnergy = mat.gcDramPower.readBitlineAccessEnergy
 			+ mat.gcDramPower.writeBitlineAccessEnergy
 			+ mat.gcRowDecoder.readDynamicEnergy + mat.rowDecoder.readDynamicEnergy
-			+ mat.precharger.readDynamicEnergy + mat.gcDramPower.writeChargeDriverEnergy
+			+ mat.precharger.readDynamicEnergy + mat.gcDramPower.writeDriverEnergy
 			+ mat.senseAmp.readDynamicEnergy;
 	const long long rowMultiplier = mat.numRow + 2;
 
@@ -155,8 +155,8 @@ void PrintGcDRAMRefreshEnergy(ostream &output, int indent, const Mat &mat,
 			<< TO_JOULE(mat.rowDecoder.readDynamicEnergy) << endl;
 	output << string(indent, ' ') << "       |--- gcDRAM Refresh Read-Precharger Energy Per Row = "
 			<< TO_JOULE(mat.precharger.readDynamicEnergy) << endl;
-	output << string(indent, ' ') << "       |--- gcDRAM Refresh Write-Charger Energy Per Row = "
-			<< TO_JOULE(mat.gcDramPower.writeChargeDriverEnergy) << endl;
+	output << string(indent, ' ') << "       |--- gcDRAM Refresh Write-Driver Energy Per Row = "
+			<< TO_JOULE(mat.gcDramPower.writeDriverEnergy) << endl;
 	output << string(indent, ' ') << "       |--- gcDRAM Refresh Sense-Amp Energy Per Row = "
 			<< TO_JOULE(mat.senseAmp.readDynamicEnergy) << endl;
 	output << string(indent, ' ') << "       |--- gcDRAM Refresh Energy Per-Row Sum = "
@@ -572,7 +572,7 @@ void Result::print(int indent) {
 		cout << string(indent, ' ') << " |--- Mat senseAmpMuxLev2Decoder Area = " << TO_SQM(bank->subarray.mat.senseAmpMuxLev2Decoder.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat precharger Area = " << TO_SQM(2*bank->subarray.mat.precharger.area) << endl;
 		if (cell->memCellType == gcDRAM)
-			cout << string(indent, ' ') << " |--- Mat gcDRAM Write Charger Area = " << TO_SQM(bank->subarray.mat.writecharger.area) << endl;
+			cout << string(indent, ' ') << " |--- Mat gcDRAM Write Driver Area = " << TO_SQM(bank->subarray.mat.writeDriver.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat senseAmp Area = " << TO_SQM(bank->subarray.mat.senseAmp.area) << endl;
 		cout << string(indent, ' ') << " |--- Mat MIV Area = " << TO_SQM(bank->subarray.mat.tsvArray.area) << endl;
 	}
@@ -630,7 +630,7 @@ void Result::print(int indent) {
 		if (inputParameter->internalSensing)
 			cout << string(indent, ' ') << "       |--- Senseamp Latency    = " << TO_SECOND(bank->subarray.mat.senseAmp.readLatency) << endl;
 		cout << string(indent, ' ') << "       |--- Precharge Latency   = " << TO_SECOND(bank->subarray.mat.precharger.readLatency) << endl;
-		cout << string(indent, ' ') << "       |--- Write Drive Latency   = " << TO_SECOND(bank->subarray.mat.writecharger.readLatency) << endl;
+		cout << string(indent, ' ') << "       |--- Write Driver Latency   = " << TO_SECOND(bank->subarray.mat.writeDriver.readLatency) << endl;
 	}
 
 	cout << string(indent, ' ') << "       |--- Mux Latency         = " << TO_SECOND(bank->subarray.mat.bitlineMux.readLatency
@@ -1151,7 +1151,7 @@ void Result::printToStream(int indent, ostream &outFile) {
 		outFile << string(indent, ' ') << " |--- Mat senseAmpMuxLev2Decoder Area = " << TO_SQM(bank->subarray.mat.senseAmpMuxLev2Decoder.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat precharger Area = " << TO_SQM(2*bank->subarray.mat.precharger.area) << endl;
 		if (cell->memCellType == gcDRAM)
-			outFile << string(indent, ' ') << " |--- Mat gcDRAM Write Charger Area = " << TO_SQM(bank->subarray.mat.writecharger.area) << endl;
+			outFile << string(indent, ' ') << " |--- Mat gcDRAM Write Driver Area = " << TO_SQM(bank->subarray.mat.writeDriver.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat senseAmp Area =" << TO_SQM(bank->subarray.mat.senseAmp.area) << endl;
 		outFile << string(indent, ' ') << " |--- Mat MIV Area = " << TO_SQM(bank->subarray.mat.tsvArray.area) << endl;
 	}
@@ -1211,7 +1211,7 @@ void Result::printToStream(int indent, ostream &outFile) {
 			outFile << string(indent, ' ') << "       |--- Senseamp Latency    = " << TO_SECOND(bank->subarray.mat.senseAmp.readLatency) << endl;
 		outFile << string(indent, ' ') << "       |--- Precharge Latency   = " << TO_SECOND(bank->subarray.mat.precharger.readLatency) << endl;
 		outFile << string(indent, ' ') << "       |--- Write Bitline Latency     = " << TO_SECOND(bank->subarray.mat.writeBitlineDelay) << endl;
-		outFile << string(indent, ' ') << "       |--- Write Drive Latency   = " << TO_SECOND(bank->subarray.mat.writecharger.readLatency) << endl;
+		outFile << string(indent, ' ') << "       |--- Write Driver Latency   = " << TO_SECOND(bank->subarray.mat.writeDriver.readLatency) << endl;
 	}
 
 	outFile << string(indent, ' ') << "       |--- Mux Latency         = " << TO_SECOND(bank->subarray.mat.bitlineMux.readLatency

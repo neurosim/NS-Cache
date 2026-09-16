@@ -1,0 +1,58 @@
+# LEGACY-ORACLE-DERIVED AOS eDRAM EXAMPLE — not an authoritative cell file.
+# Observed profile: legacy_cpp/maintained_experimental_oracle/logs/
+# aos_edram_cache_14nm_m3d_ls_io.log (printed values are rounded).
+# The original .cell and its unprinted calibration/provenance are unavailable.
+# Other explicit compact coefficients below are model defaults, not recovered fits.
+# Storage capacitance remains a demo placeholder. Do not publish performance claims.
+# The top-level configuration must use the same operating temperature (300 K).
+
+-MemCellType: eDRAM
+-CellArea (F^2): 76.530600
+-CellAspectRatio: 1.46
+-ReadMode: voltage
+# Legacy base-cell access type; -OxideTransistor below selects the actual device model.
+-AccessType: CMOS
+# Placeholder: the preserved log does not identify the original storage capacitance.
+-DRAMCellCapacitance (F): 13e-15
+-ResetVoltage (V): vdd
+-SetVoltage (V): vdd
+-MinSenseVoltage (mV): 10
+-RetentionTime (us): 100
+-Temperature (K): 300
+
+# One AOS access device. MobilityScale selects the voltage-dependent compact
+# mobility profile; a Mobility/Mu field would instead force constant mobility.
+-OxideTransistor: true
+-OxideAccessTransistorTemperature (K): 300
+-OxideAccessTransistorTailTemperature (K): 400
+-OxideAccessTransistorElementaryCharge (C): 1.602e-19
+-OxideAccessTransistorBoltzmannConstant (J/K): 1.380649e-23
+-OxideAccessTransistorVacuumPermittivity (F/m): 8.854e-12
+-OxideAccessTransistorSemiconductorPermittivity (F/m): 8.854e-11
+-OxideAccessTransistorNu0T0: 1.0
+-OxideAccessTransistorWidth (m): 100e-9
+-OxideAccessTransistorLength (m): 30e-9
+-OxideAccessTransistorOverlapCapacitance (F): 30e-18
+-OxideAccessTransistorFlatBandVoltage (V): -0.5396
+-OxideAccessTransistorTrapDensity: 1e17
+-OxideAccessTransistorFermiReference: 0.0
+-OxideAccessTransistorOxideCapacitance (F/m^2): 0.0371868
+-OxideAccessTransistorVRHThreshold (V): -1.5
+-OxideAccessTransistorPercolationThreshold (V): -1.0
+-OxideAccessTransistorVRHPrefactor (cm^2/Vs): 15.0
+-OxideAccessTransistorPercolationPrefactor (cm^2/Vs): 35.0
+-OxideAccessTransistorPercolationExponent: 0.3
+-OxideAccessTransistorMobilityScale: 0.09921
+-OxideAccessTransistorLeakageSwingFactor: 2.0
+-OxideAccessTransistorLeakageSurfacePotentialReference (V): 0.15
+-OxideAccessTransistorLeakageScale: 13.16
+-OxideAccessTransistorCurrentFloor (A): 1e-17
+-OxideAccessTransistorTotalContactResistance (kOhm-um): 0.5
+-OxideAccessTransistorOffGateVoltage (V): -0.75
+-OxideAccessTransistorOnGateVoltage (V): 1.25
+
+# Optional scaling of the supplied 100 us retention time. The reference and
+# applied hold voltages are equal here, so the off-current ratio remains one.
+# This is not a calibrated physical retention equation.
+-RetentionModel: AOSOffCurrentRatio
+-RetentionReferenceHoldVoltage (V): -0.75

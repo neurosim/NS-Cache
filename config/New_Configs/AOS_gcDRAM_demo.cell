@@ -1,8 +1,14 @@
-# Synthetic functionality fixture only; not an authoritative calibrated AOS cell.
+# SYNTHETIC AOS gcDRAM EXAMPLE — parser/model demonstration only.
+# Dimensions and coefficients below are illustrative, not measured or calibrated.
+# Do not use this file to make or publish AOS performance claims. Replace it
+# with an authoritative, provenance-backed cell file for scientific use.
+# The top-level configuration must use the same operating temperature (300 K).
+
 -MemCellType: gcDRAM
 -CellArea (F^2): 60
 -CellAspectRatio: 1.46
 -ReadMode: voltage
+# Legacy base-cell access type; -OxideTransistor below selects the actual device model.
 -AccessType: CMOS
 -DRAMCellCapacitance (F): 13e-15
 -ResetVoltage (V): vdd
@@ -11,7 +17,9 @@
 -RetentionTime (us): 40
 -Temperature (K): 300
 
--OxideTransistor: YES
+# The read and write oxide devices are specified separately. The read width
+# is 200 nm; the write width is 100 nm. The write overlap and mobility differ.
+-OxideTransistor: true
 -OxideReadTransistorTemperature (K): 300
 -OxideReadTransistorTailTemperature (K): 400
 -OxideReadTransistorElementaryCharge (C): 1.602e-19
@@ -68,4 +76,7 @@
 -OxideWriteTransistorCurrentFloor (A): 1e-17
 -OxideWriteTransistorTotalContactResistance (kOhm-um): 0.0
 -OxideWriteTransistorOffGateVoltage (V): 0.0
--OxideWriteTransistorOnGateVoltage (V): Vdd
+-OxideWriteTransistorOnGateVoltage (V): vdd
+
+# gcDRAM retention remains the supplied 40 us value. No AOS gcDRAM
+# retention equation is inferred by this example.

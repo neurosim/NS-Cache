@@ -41,7 +41,7 @@ struct DRAMTimingResult {
 struct GcDRAMPowerResult {
 	double readBitlineAccessEnergy = 0;
 	double writeBitlineAccessEnergy = 0;
-	double writeChargeDriverEnergy = 0;
+	double writeDriverEnergy = 0;
 	double aosLeakageUpperBound = 0;
 };
 
@@ -174,7 +174,7 @@ public:
 	RowDecoder	senseAmpMuxLev2Decoder;
 	Mux			senseAmpMuxLev2;
 	Precharger	precharger;
-	Precharger	writecharger;
+	Precharger	writeDriver;
 	SenseAmp	senseAmp;
 
 	/* Monolithic 3D Update: Add MIV Grid for M3D connectivit*/
