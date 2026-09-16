@@ -12,7 +12,8 @@ Copyright of the model is maintained by the developers, and the model is distrib
 [Creative Commons Attribution-NonCommercial 4.0 International Public License](http://creativecommons.org/licenses/by-nc/4.0/legalcode).
 
 
-**[Read the Docs Page! (Currently a WIP)](https://neurosimns-cache.readthedocs.io/en/latest/).**
+
+**Documentation [Read the Docs Page! (Currently a WIP)](https://neurosimns-cache.readthedocs.io/en/latest/).**
 
 <br clear="left"/>
 If you use the tool or adapt the tool in your work or publication, please cite the following reference:
