@@ -8,5 +8,6 @@
 /src/obj-strict/
 /src/obj-asan/
 /src/obj-ubsan/
+/site/
 /tests/__pycache__/
 *.pyc
