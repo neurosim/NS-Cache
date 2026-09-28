@@ -115,7 +115,7 @@ void SubArray::Initialize(int _numRowMat, int _numColumnMat, int _numAddressBit,
 	}
 
 	mat.Initialize(numRow, numColumn, numRowPerSet > 1, true /* TO-DO: need to correct */,
-			muxSenseAmp, internalSenseAmp, muxOutputLev1, muxOutputLev2, areaOptimizationLevel, monolithicStackCount);
+			muxSenseAmp, internalSenseAmp, muxOutputLev1, muxOutputLev2, areaOptimizationLevel, monolithicStackCount, stackedDieCount);
 
 	if (mat.invalid) {
 		invalid = true;

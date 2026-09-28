@@ -63,7 +63,7 @@ Mat::~Mat() {
 
 void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowPerSet, bool _split,
 		int _muxSenseAmp, bool _internalSenseAmp, int _muxOutputLev1, int _muxOutputLev2,
-		BufferDesignTarget _areaOptimizationLevel, int _num3DLevels) {
+		BufferDesignTarget _areaOptimizationLevel, int _num3DLevels, int _stackedDieCount) {
 	if (initialized)
 		cout << "[Mat] Warning: Already initialized!" << endl;
 
@@ -81,6 +81,8 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 	voltagePrecharge = tech->vdd;
 	dramTiming = DRAMTimingResult();
 	gcDramPower = GcDRAMPowerResult();
+	sensingBitlineReadEnergy = 0;
+	sensingMuxInputReadEnergy = 0;
 	m3d = M3DLayoutResult();
 	aosLeakageUpperBound = 0;
 	aosAccessOperatingPoint = AOSDeviceOperatingPoint{};
@@ -671,14 +673,32 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 
 	if (internalSenseAmp) {
 		if (!invalid) {
-			senseAmp.Initialize(numSenseAmp, !voltageSense, senseVoltage, lenWordline / numColumn * muxSenseAmp * 2);
+			BinarySenseAmpOperatingPoint point;
+			point.contextAvailable = true;
+			point.internalSenseAmp = true;
+			point.tierCount = MAX(MAX(num3DLevels, _stackedDieCount), inputParameter->monolithic3DMat ? 2 : 1);
+			point.cellType = cell->memCellType;
+			point.accessType = cell->accessType;
+			point.temperatureK = inputParameter->temperature;
+			point.readVoltage = cell->readVoltage;
+			point.readPowerOverride = cell->readPower != 0;
+			/* Access-device resistance is already included. Wire and mux RC
+			 * stay in their existing timing stages, outside the fitted CSA. */
+			point.resistanceOn = resMemCellOn;
+			point.resistanceOff = resMemCellOff;
+			point.columnCapacitance = capBitline + capCellAccess;
+			point.referenceColumnArea = lenBitline * (lenWordline / numColumn);
+			senseAmp.Initialize(numSenseAmp, !voltageSense, senseVoltage, lenWordline / numColumn * muxSenseAmp * 2, &point);
 			if (senseAmp.invalid)
 				invalid = true;
 			else
 				senseAmp.CalculateRC();
 		}
 		if (!invalid) {
-			bitlineMux.Initialize(muxSenseAmp, numColumn / muxSenseAmp, senseAmp.capLoad, senseAmp.capLoad, maxBitlineCurrent);
+			/* The binary CSA owns both input-port switching energies. The mux
+			 * still sees Cin for timing, and charges its own pass-device caps. */
+			bitlineMux.Initialize(muxSenseAmp, numColumn / muxSenseAmp, senseAmp.capLoad,
+					senseAmp.UsesBinaryModel() ? 0 : senseAmp.capLoad, maxBitlineCurrent);
 		}
 	} else {
 		if (!invalid) {
@@ -751,7 +771,13 @@ void Mat::CalculateArea() {
 
 		if (internalSenseAmp) {
 			senseAmp.CalculateArea();
-			if (senseAmp.width > width * 1.001) {
+			if (senseAmp.UsesBinaryModel()) {
+				/* Include the entire CSA/reference macro even when its natural
+				 * pitch exceeds the MAT width; leave legacy layout unchanged. */
+				senseAmp.width = width;
+				senseAmp.height = senseAmp.area / width;
+				addHeight += senseAmp.height;
+			} else if (senseAmp.width > width * 1.001) {
 				/* should never happen */
 				// cout << "[ERROR] Sense Amplifier area calculation is wrong!" << endl;
 			} else {
@@ -1450,7 +1476,16 @@ void Mat::CalculatePower() {
 				leakage += aosLeakageUpperBound;
 			}
 		} else if (cell->memCellType == MRAM || cell->memCellType == PCRAM || cell->memCellType == memristor || cell->memCellType == FBRAM) {
-			if (cell->readMode == false) {	/* current-sensing */
+			if (senseAmp.UsesBinaryModel()) {
+				/* BinarySenseAmp includes selected data/reference column charge
+				 * and operating energy. Do not also charge the legacy array terms. */
+				/* Mux::CalculatePower owns output-side pass caps. Retain the
+				 * selected input-side diffusion charge here, outside CSA Cin. */
+				sensingMuxInputReadEnergy = bitlineMux.capForPreviousPowerCalculation
+						* cell->readVoltage * cell->readVoltage * numSenseAmp;
+				readDynamicEnergy = sensingMuxInputReadEnergy;
+				sensingBitlineReadEnergy = 0;
+			} else if (cell->readMode == false) {	/* current-sensing */
 				/* Use ICCAD 2009 model */
 				double resBitlineMux = bitlineMux.resNMOSPassTransistor;
 				double vpreMin = cell->readVoltage * resBitlineMux / (resBitlineMux + resBitline +resMemCellOn);
@@ -1458,12 +1493,15 @@ void Mat::CalculatePower() {
 				readDynamicEnergy = capCellAccess * vpreMax * vpreMax + bitlineMux.capForPreviousPowerCalculation
 						* vpreMin * vpreMin + capBitline * (vpreMax * vpreMax + vpreMin * vpreMin + vpreMax * vpreMin) / 3;
 				readDynamicEnergy *= numColumn;
+				sensingBitlineReadEnergy = readDynamicEnergy;
 			} else {						/* voltage-sensing */
 				readDynamicEnergy = (capCellAccess + capBitline + bitlineMux.capForPreviousPowerCalculation) *
 						(voltagePrecharge * voltagePrecharge - voltageMemCellOn * voltageMemCellOn ) * numColumn;
 			}
 
-			if (cell->readPower == 0) 
+			if (senseAmp.UsesBinaryModel())
+				cellReadEnergy = 0;
+			else if (cell->readPower == 0)
 				cellReadEnergy = 2 * cell->CalculateReadPower() * senseAmp.readLatency; /* x2 is because of the reference cell */
 			else
 				cellReadEnergy = 2 * cell->readPower * senseAmp.readLatency;

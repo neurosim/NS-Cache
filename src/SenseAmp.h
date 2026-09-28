@@ -20,6 +20,7 @@
 #define SENSEAMP_H_
 
 #include "FunctionUnit.h"
+#include "BinarySenseAmp.h"
 
 class SenseAmp: public FunctionUnit {
 public:
@@ -28,7 +29,9 @@ public:
 
 	/* Functions */
 	void PrintProperty();
-	void Initialize(long long _numColumn, bool _currentSense, double _senseVoltage /* Unit: V */, double _pitchSenseAmp);
+	void Initialize(long long _numColumn, bool _currentSense, double _senseVoltage /* Unit: V */, double _pitchSenseAmp,
+			const BinarySenseAmpOperatingPoint *operatingPoint = nullptr);
+	bool UsesBinaryModel() const { return currentSense && binaryResult.status == BinarySenseAmpStatus::Applied; }
 	void CalculateArea();
 	void CalculateRC();
 	void CalculateLatency(double _rampInput);
@@ -43,6 +46,8 @@ public:
 	double senseVoltage;	/* Minimum sensible voltage */
 	double capLoad;		/* Load capacitance of sense amplifier */
 	double pitchSenseAmp;	/* The maximum width allowed for one sense amplifier layout */
+	BinarySenseAmpOperatingPoint binaryOperatingPoint;
+	BinarySenseAmpResult binaryResult;
 };
 
 #endif /* SENSEAMP_H_ */

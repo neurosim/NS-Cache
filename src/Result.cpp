@@ -35,6 +35,95 @@ bool IsRefreshMemory(MemCellType type) {
 	return type == DRAM || type == eDRAM || type == gcDRAM;
 }
 
+const SenseAmp &SensingAmplifier(const Bank &bank) {
+	const SenseAmp *amp = &bank.subarray.mat.senseAmp;
+	if (!bank.internalSenseAmp) {
+		const auto *external = dynamic_cast<const BankWithoutHtree *>(&bank);
+		if (external)
+			amp = &external->globalSenseAmp;
+	}
+	return *amp;
+}
+
+const char *SensingModelName(const SenseAmp &amp) {
+	return amp.UsesBinaryModel() ? "neurosim-binary-v1" : amp.currentSense ? "legacy-current" : "voltage";
+}
+
+void PrintSensingDetails(ostream &output, int indent, const Bank &bank, bool includeStatistics = true) {
+	const Mat &mat = bank.subarray.mat;
+	const SenseAmp *amp = &SensingAmplifier(bank);
+	const auto &result = amp->binaryResult;
+	const auto &point = amp->binaryOperatingPoint;
+	output << string(indent, ' ') << "CSA Model = "
+			<< SensingModelName(*amp) << '\n';
+	if (amp->currentSense && !amp->UsesBinaryModel())
+		output << string(indent, ' ') << "CSA Fallback Reason = "
+				<< (bank.internalSenseAmp ? result.reason : "external-sensing") << '\n';
+	if (amp->UsesBinaryModel()) {
+		output << string(indent, ' ') << "CSA Calibration = experimental binary transfer; R/C calibration envelope unpublished\n";
+		output << string(indent, ' ') << "CSA Standby = uncalibrated subthreshold estimate (SAE low, read bias disabled)\n";
+	}
+	if (!includeStatistics || !inputParameter->viewMatStats)
+		return;
+	const ios::fmtflags flags = output.flags();
+	const streamsize precision = output.precision();
+	output << scientific << setprecision(17);
+	const auto value = [&](const char *name, double number) {
+		output << string(indent, ' ') << "CSA SI " << name << " = " << number << '\n';
+	};
+	value("area_m2", amp->area);
+	value("input_capacitance_F", amp->capLoad);
+	value("read_latency_s", amp->readLatency);
+	value("read_energy_J", amp->readDynamicEnergy);
+	value("standby_leakage_W", amp->leakage);
+	value("amplifier_count", amp->numColumn);
+	value("resistance_on_ohm", point.resistanceOn);
+	value("resistance_off_ohm", point.resistanceOff);
+	value("external_column_capacitance_F", point.columnCapacitance);
+	value("read_bias_V", point.readVoltage);
+	value("temperature_K", point.temperatureK);
+	value("reference_resistance_ohm", result.referenceResistance);
+	value("margin", result.resistanceMargin);
+	value("core_area_m2", result.coreArea);
+	value("reference_area_m2", result.referenceArea);
+	value("internal_switching_energy_J", result.internalSwitchingEnergy);
+	value("column_switching_energy_J", result.columnSwitchingEnergy);
+	value("operating_energy_J", result.operatingEnergy);
+	/* A matched boundary: CSA, columns/cells, and data muxes. Including muxes
+	 * keeps the boundary fixed when input-capacitor energy changes owner.
+	 * External sensing has a different global routing/activation boundary. */
+	if (bank.internalSenseAmp && amp->currentSense)
+		value("sensing_path_energy_J", amp->readDynamicEnergy + mat.cellReadEnergy
+				+ mat.sensingBitlineReadEnergy + mat.sensingMuxInputReadEnergy
+				+ mat.bitlineMux.readDynamicEnergy + mat.senseAmpMuxLev1.readDynamicEnergy
+				+ mat.senseAmpMuxLev2.readDynamicEnergy);
+	value("bank_area_m2", bank.area);
+	value("bank_read_latency_s", bank.readLatency);
+	value("bank_write_latency_s", bank.writeLatency);
+	value("bank_read_energy_J", bank.readDynamicEnergy);
+	value("bank_write_energy_J", bank.writeDynamicEnergy);
+	value("bank_leakage_W", bank.leakage);
+	value("mat_area_m2", mat.area);
+	value("mat_read_latency_s", mat.readLatency);
+	value("mat_write_latency_s", mat.writeLatency);
+	value("mat_read_energy_J", mat.readDynamicEnergy);
+	value("mat_write_energy_J", mat.writeDynamicEnergy);
+	value("mat_leakage_W", mat.leakage);
+	value("mat_rows", mat.numRow);
+	value("mat_columns", mat.numColumn);
+	value("mat_cell_read_energy_J", mat.cellReadEnergy);
+	value("mat_legacy_bitline_read_energy_J", mat.sensingBitlineReadEnergy);
+	value("mat_mux_input_energy_J", mat.sensingMuxInputReadEnergy);
+	value("mat_mux_energy_J", mat.bitlineMux.readDynamicEnergy);
+	value("mat_mux_latency_s", mat.bitlineMux.readLatency);
+	value("mat_mux_timing_load_F", mat.bitlineMux.capLoad);
+	value("mat_mux_power_load_F", mat.bitlineMux.capInputNextStage);
+	value("mat_sense_area_included_m2", bank.internalSenseAmp
+			&& (amp->UsesBinaryModel() || amp->width <= mat.lenWordline * 1.001) ? amp->area : 0);
+	output.flags(flags);
+	output.precision(precision);
+}
+
 const char *M3DDominantTierName(M3DDominantTier tier) {
 	switch (tier) {
 	case M3DDominantTier::logic:
@@ -545,6 +634,7 @@ void Result::print(int indent) {
 	cout << string(indent, ' ') << "=============" << endl;
     cout << string(indent, ' ') << "   RESULT" << endl;
     cout << string(indent, ' ') << "=============" << endl;
+	PrintSensingDetails(cout, indent, *bank);
 
 	cout << string(indent, ' ') << "Area:" << endl;
 
@@ -1123,6 +1213,7 @@ void Result::printToStream(int indent, ostream &outFile) {
 	outFile << string(indent, ' ') << "=============" << endl;
     outFile << string(indent, ' ') << "   RESULT" << endl;
     outFile << string(indent, ' ') << "=============" << endl;
+	PrintSensingDetails(outFile, indent, *bank);
 
 	outFile << string(indent, ' ') << "Area:" << endl;
 
@@ -1681,6 +1772,11 @@ void Result::printAsCache(Result &tagResult, CacheAccessMode cacheAccessMode) {
             print(4);
             cout << endl << "CACHE TAG ARRAY DETAILS";
             tagResult.print(4);
+        } else {
+            cout << endl << "CACHE DATA ARRAY SENSING" << endl;
+            PrintSensingDetails(cout, 4, *bank, false);
+            cout << endl << "CACHE TAG ARRAY SENSING" << endl;
+            PrintSensingDetails(cout, 4, *tagResult.bank, false);
         }
 	}
 }
@@ -1829,6 +1925,11 @@ void Result::printAsCacheToFile(Result &tagResult, CacheAccessMode cacheAccessMo
 			printToStream(4, outFile);
 			outFile << endl << "CACHE TAG ARRAY DETAILS";
 			tagResult.printToStream(4, outFile);
+        } else {
+            outFile << endl << "CACHE DATA ARRAY SENSING" << endl;
+            PrintSensingDetails(outFile, 4, *bank, false);
+            outFile << endl << "CACHE TAG ARRAY SENSING" << endl;
+            PrintSensingDetails(outFile, 4, *tagResult.bank, false);
         }
     }
 
@@ -1999,7 +2100,13 @@ void Result::printToCsvFile(ofstream &outputFile) {
         outputFile << "0,";
     }
 
-	outputFile << "\n";
+	/* Append resolved model metadata without shifting existing numeric fields.
+	 * Cache exports retain their existing separate data/tag bank records. */
+	const SenseAmp &amp = SensingAmplifier(*bank);
+	outputFile << SensingModelName(amp) << ",";
+	if (amp.currentSense && !amp.UsesBinaryModel())
+		outputFile << (bank->internalSenseAmp ? amp.binaryResult.reason : "external-sensing");
+	outputFile << "," << (amp.UsesBinaryModel() ? "experimental-uncalibrated-standby" : "legacy") << ",\n";
 }
 
 void Result::printAsCacheToCsvFile(Result &tagResult, CacheAccessMode cacheAccessMode, ofstream &outputFile) {

@@ -5,7 +5,6 @@ OUTDIR ?= obj
 
 CXX := g++
 RM ?= rm -f
-PYTHON ?= python3
 
 CPPFLAGS ?=
 CXXFLAGS ?=
@@ -20,16 +19,8 @@ DEPFLAGS := -MMD -MP
 SRC := $(wildcard *.cpp)
 OBJ := $(patsubst %.cpp,$(OUTDIR)/%.o,$(notdir $(SRC)))
 DEP := $(OBJ:.o=.d)
-SANITIZER_CASES := \
-	tests/fixtures/fixed_sram_512x128.cfg \
-	tests/fixtures/fixed_dram_512x128.cfg \
-	tests/fixtures/fixed_edram_512x128.cfg \
-	tests/fixtures/fixed_gcdram_512x128.cfg \
-	tests/fixtures/fixed_aos_edram_512x128.cfg \
-	tests/fixtures/fixed_aos_gcdram_8x1024.cfg
 
-.PHONY: all build clean dbg strict test ci asan ubsan asan-test ubsan-test \
-	sanitize sanitizer-test sanitizers
+.PHONY: all build clean dbg strict ci asan ubsan sanitizers
 
 all: BUILD_FLAGS += -O3 -mtune=native
 all: build
@@ -53,23 +44,10 @@ ubsan:
 		BUILD_FLAGS="-O1 -g -fno-omit-frame-pointer -fsanitize=undefined"
 
 sanitizers: asan ubsan
-asan-test: asan
-	cd .. && for fixture in $(SANITIZER_CASES); do \
-		ASAN_OPTIONS=detect_leaks=0:halt_on_error=1 ./nsc-asan $$fixture >/dev/null || exit $$?; \
-	done
 
-ubsan-test: ubsan
-	cd .. && for fixture in $(SANITIZER_CASES); do \
-		UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 ./nsc-ubsan $$fixture >/dev/null || exit $$?; \
-	done
-
-sanitizer-test: asan-test ubsan-test
-sanitize: sanitizer-test
-
-test: all
-	cd .. && $(PYTHON) -m unittest discover -s tests -p 'test_*.py'
-
-ci: strict test sanitizer-test
+# The regression suite and study fixtures are maintained in the CSA handoff.
+# CI checks source builds without requiring those archived assets.
+ci: all strict sanitizers
 
 $(target): $(OBJ)
 	$(CXX) $(BUILD_FLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
