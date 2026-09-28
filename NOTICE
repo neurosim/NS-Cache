@@ -3,3 +3,12 @@ Also, the coarse- and fine-grained TSV (through silicon via) models are utilized
 Technology models in Bulk Planar CMOS technologies and eNVM technologies from DESTINY
 
 This software is released under modified BSD license, see the file LICENSE.
+
+The binary current-sense-amplifier adaptation in src/BinarySenseAmp.cpp uses
+NeuroSim's updated MultilevelSenseAmp equations from revision
+9825ef40bf14d12a72c99d8e32ff8c499aeddf24 (neurosim/NeuroSim).
+Those equations are distributed under CC BY-NC 4.0; their original copyright,
+redistribution conditions, and disclaimer are retained in that source file.
+The source comments describe the binary reference, accounting boundary, and
+standby-leakage assumptions. This adaptation is experimental;
+source-fit parity does not establish circuit or silicon accuracy.

@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  build-test-sanitize:
+  build-source:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -13,5 +13,5 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Build, test, and run sanitizers
+      - name: Build release, strict, and sanitizer binaries
         run: make -C src ci

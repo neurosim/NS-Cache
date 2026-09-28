@@ -36,14 +36,25 @@ SenseAmp::~SenseAmp() {
 	// TODO Auto-generated destructor stub
 }
 
-void SenseAmp::Initialize(long long _numColumn, bool _currentSense, double _senseVoltage, double _pitchSenseAmp) {
+void SenseAmp::Initialize(long long _numColumn, bool _currentSense, double _senseVoltage, double _pitchSenseAmp,
+		const BinarySenseAmpOperatingPoint *operatingPoint) {
 	if (initialized)
 		cout << "[Sense Amp] Warning: Already initialized!" << endl;
+	invalid = false;
 
 	numColumn = _numColumn;
 	currentSense = _currentSense;
 	senseVoltage = _senseVoltage;
 	pitchSenseAmp = _pitchSenseAmp;
+	binaryOperatingPoint = operatingPoint ? *operatingPoint : BinarySenseAmpOperatingPoint{};
+	binaryResult = BinarySenseAmpResult{};
+	if (currentSense) {
+		binaryResult = EvaluateBinarySenseAmp(binaryOperatingPoint, *tech, numColumn);
+		if (binaryResult.status == BinarySenseAmpStatus::Invalid) {
+			cout << "[Sense Amp] Error: " << binaryResult.reason << endl;
+			invalid = true;
+		}
+	}
 
 	if (pitchSenseAmp <= tech->featureSize * 3) {
 		/* too small, cannot do the layout */
@@ -58,6 +69,10 @@ void SenseAmp::CalculateArea() {
 		cout << "[Sense Amp] Error: Require initialization first!" << endl;
 	} else if (invalid) {
 		height = width = area = invalid_value;
+	} else if (UsesBinaryModel()) {
+		area = binaryResult.area;
+		width = pitchSenseAmp * numColumn;
+		height = area / width;
 	} else {
 		height = width = area = 0;
 		if (currentSense) {	/* current-sensing needs IV converter */
@@ -106,6 +121,8 @@ void SenseAmp::CalculateRC() {
 		cout << "[Sense Amp] Error: Require initialization first!" << endl;
 	} else if (invalid) {
 		readLatency = writeLatency = invalid_value;
+	} else if (UsesBinaryModel()) {
+		capLoad = binaryResult.inputCapacitance;
 	} else {
 		capLoad = CalculateGateCap(((tech->featureSize <= 14*1e-9)? 2:1) * (W_SENSE_P + W_SENSE_N) * tech->featureSize, *tech)
 				+ CalculateDrainCap(((tech->featureSize <= 14*1e-9)? 2:1) * W_SENSE_N * tech->featureSize, NMOS, pitchSenseAmp, *tech)
@@ -118,6 +135,11 @@ void SenseAmp::CalculateRC() {
 void SenseAmp::CalculateLatency(double _rampInput) {	/* _rampInput is actually no use in SenseAmp */
 	if (!initialized) {
 		cout << "[Sense Amp] Error: Require initialization first!" << endl;
+	} else if (currentSense && binaryResult.status == BinarySenseAmpStatus::Invalid) {
+		readLatency = writeLatency = refreshLatency = invalid_value;
+	} else if (UsesBinaryModel()) {
+		readLatency = refreshLatency = binaryResult.readLatency;
+		writeLatency = 0;
 	} else {
 		readLatency = writeLatency = 0;
 		if (currentSense) {	/* current-sensing needs IV converter */
@@ -166,6 +188,10 @@ void SenseAmp::CalculatePower() {
 		cout << "[Sense Amp] Error: Require initialization first!" << endl;
 	} else if (invalid) {
 		readDynamicEnergy = writeDynamicEnergy = leakage = invalid_value;
+	} else if (UsesBinaryModel()) {
+		readDynamicEnergy = refreshDynamicEnergy = binaryResult.readDynamicEnergy;
+		writeDynamicEnergy = 0;
+		leakage = binaryResult.leakage;
 	} else {
 		readDynamicEnergy = writeDynamicEnergy = 0;
 		leakage = 0;

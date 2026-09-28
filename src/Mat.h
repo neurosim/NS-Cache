@@ -71,7 +71,7 @@ public:
 	void PrintProperty();
 	void Initialize(long long _numRow, long long _numColumn, bool _multipleRowPerSet, bool _split,
 			int _muxSenseAmp, bool _internalSenseAmp, int _muxOutputLev1, int _muxOutputLev2,
-			BufferDesignTarget _areaOptimizationLevel, int _num3DLevels);
+			BufferDesignTarget _areaOptimizationLevel, int _num3DLevels, int _stackedDieCount = 1);
 	void CalculateArea();
 	//void CalculateRC();
 	void CalculateLatency(double _rampInput);
@@ -121,6 +121,8 @@ public:
 	double resEquivalentOn = 0;          /* resInSerialForSenseAmp in parallel with resMemCellOn, Unit: ohm */
 	double resEquivalentOff = 0;          /* resInSerialForSenseAmp in parallel with resMemCellOn, Unit: ohm */
 	double bitlineDelay = 0;	/* Bitline delay, Unit: s */
+	double sensingBitlineReadEnergy = 0; /* Legacy current-mode column charge only, J per MAT. */
+	double sensingMuxInputReadEnergy = 0; /* New CSA: selected input-side mux drain charge, J per MAT. */
 	double readBitlineDelay = 0;	/* gain cell read Bitline delay, Unit: s */
 	double writeBitlineDelay = 0;	/* gain cell write Bitline delay, Unit: s */
 	double chargeLatency = 0;	/* The bitline charge delay during write operations, Unit: s */
