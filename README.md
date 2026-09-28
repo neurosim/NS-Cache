@@ -21,7 +21,7 @@ If you use the tool or adapt the tool in your work or publication, please cite t
 * F. Waqar, J. Kwak, J. Lee, M. Shon, O. Phadke, M. Gholamrezaei, K. Skadron, S. Yu, ※Optimization and Benchmarking of Monolithically Stackable Gain Cell Memory for Last-Level Cache, *§ IEEE Transactions Computers (T-Computer), 2025.*
 10.1109/TC.2025.3625490
 
-:star2: This is the released version 2.0.0 (August, 2026) for the tool, and this version has **FinFET and Nanosheet generation technology integration, Peripheral circuit extensions, Gain-Cell parameterization and modifications for the Gem5 ecosystem, Documentation prep, and a mutable AOS C++ model extension**. NS-Cache is currently a work-in-progress project in its intermediate iteration. Future releases will tune temperature variability models and provide more accessible technology extensions.
+:star2: This is the released version 2.1.0 (September, 2026) for the tool, and this version has **FinFET and Nanosheet generation technology integration, Peripheral circuit extensions, Gain-Cell parameterization and modifications for the Gem5 ecosystem, Documentation prep, and a mutable AOS C++ model extension**. NS-Cache is currently a work-in-progress project in its intermediate iteration. Future releases will tune temperature variability models and provide more accessible technology extensions.
 
 ```
 The following is a list of the supported nodes with key features:
