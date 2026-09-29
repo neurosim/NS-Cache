@@ -4,6 +4,10 @@ NS-Cache evaluates the area, latency, dynamic energy, and leakage of candidate m
 
 ## From configuration to candidate result
 
+The [execution reference](code-reference/execution.md) documents the functions
+and macros that implement this flow. For output interfaces, selection rules,
+and bandwidth functions, see [Results and reporting](code-reference/results.md).
+
 The evaluation begins with the top-level [configuration](configuration.md), technology initialization, and cell-file validation. For a cache target, the tag capacity is derived first and candidate tag-array organizations are evaluated. The data-array search then incorporates the selected cache access mode. A RAM target evaluates the data array without the tag search. The execution path is implemented in [main.cpp](https://github.com/neurosim/NS-Cache/blob/main/src/main.cpp), with search loops and evaluation helpers in [macros.h](https://github.com/neurosim/NS-Cache/blob/main/src/macros.h).
 
 Candidate organizations are formed from the permitted array dimensions, activation counts, multiplexing factors, buffer choices, and stacking options. Mat rows and columns are derived from capacity and addressing constraints. A forced mat size retains only candidates whose derived dimensions match the requested dimensions.

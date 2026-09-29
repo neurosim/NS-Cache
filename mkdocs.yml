@@ -13,17 +13,27 @@ extra_css:
 
 markdown_extensions:
   - attr_list
+  - admonition
 
 nav:
   - Overview: index.md
-  - User guide:
+  - Starter Guide:
       - Running NS-Cache: getting-started.md
       - Configuration: configuration.md
-  - Architecture and operation:
+  - Architecture:
       - DESTINY inheritance and objects: architecture.md
       - Functional model and results: functionality.md
-  - Model options:
+  - Programmer's Guide:
+      - Overview: code-reference/index.md
+      - Execution and lifecycle: code-reference/execution.md
+      - Configuration and devices: code-reference/devices.md
+      - Array hierarchy: code-reference/hierarchy.md
+      - Peripheral circuits: code-reference/peripherals.md
+      - Interconnects: code-reference/interconnects.md
+      - Results and reporting: code-reference/results.md
+  - Technology Models:
       - Monolithic 3D: models/monolithic-3d.md
       - Transistor technology: models/transistor-technology.md
       - AOS devices: models/aos.md
-  - References: references.md
+  - References:
+      - Papers and model sources: references.md

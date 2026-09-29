@@ -19,6 +19,12 @@ img.homepage-logo {
     overflow-wrap: anywhere;
 }
 
+/* Leave room for method and parameter names beside their descriptions. */
+.wy-table-responsive table th:first-child,
+.wy-table-responsive table td:first-child {
+    min-width: 10rem;
+}
+
 /* Keep paper figures compact; their links retain the full-resolution images. */
 img.paper-figure {
     display: block;
@@ -27,4 +33,20 @@ img.paper-figure {
     max-width: min(100%, 480px);
     max-height: 360px;
     margin: 1rem auto;
+}
+
+/* Separate executable examples and API signatures from body text. */
+.rst-content pre {
+    border-left: 3px solid #6b8799;
+    background: #f5f7f9;
+}
+
+.rst-content pre code {
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+/* Callouts use the theme's Note, Tip, and Warning colors. */
+.rst-content .admonition > :last-child {
+    margin-bottom: 0;
 }
