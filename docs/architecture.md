@@ -32,6 +32,11 @@ Total instance counts determine the footprint and leakage contributions. Active 
 
 ## Core objects
 
+For method signatures, initialization requirements, ownership, and calculated
+fields, follow the [Programmer's Guide](code-reference/index.md). Its
+[array hierarchy chapter](code-reference/hierarchy.md) describes the functions
+and component ownership in banks, subarrays, mats, and their peripherals.
+
 | Object | Responsibility |
 | --- | --- |
 | `InputParameter` | Reads the top-level configuration: capacity, target, search constraints, routing, operating conditions, and model options. |

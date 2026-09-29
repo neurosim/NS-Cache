@@ -27,6 +27,7 @@ are evaluated separately and combined according to the cache access mode.
 | [Configuration parameters](configuration.md) | System specifications, organization constraints, and cell definitions |
 | [Architecture](architecture.md) | DESTINY inheritance, memory hierarchy, and circuit objects |
 | [Functional model](functionality.md) | Read, write, and refresh operations; interpretation of reported metrics |
+| [Programmer's Guide](code-reference/index.md) | Class and function details: inputs, units, state changes, call order, and failure behavior |
 | [Monolithic 3D](models/monolithic-3d.md) | Memory-tier selection, vertical interconnects, and projected footprint |
 | [Transistor technology](models/transistor-technology.md) | CMOS device generations, standard-cell geometry, and interconnect assumptions |
 | [AOS devices](models/aos.md) | Oxide-device configuration, operating points, retention, and leakage |

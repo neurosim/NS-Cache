@@ -58,6 +58,6 @@ eDRAM:  Vdd × rows × columns × Ioff(access)
 gcDRAM: Vdd × (rows + 2) × columns × [Ioff(read) + Ioff(write)]
 ```
 
-This contribution is added to the existing leakage accounting and reported separately as `AOS full-Vds leakage upper bound`. The estimate is uncalibrated and depends on a full-Vds assumption rather than the actual standby bias distribution. Quantitative AOS performance claims require an authoritative device/cell parameter set, calibration provenance, and validation of the surrounding circuit assumptions.
+This contribution is added to the existing leakage accounting and reported separately as `AOS full-Vds leakage upper bound`. The estimate is uncalibrated and depends on a full-Vds assumption rather than the actual standby bias distribution. Quantitative AOS performance claims require an authoritative device/cell parameter set, calibration sources, and validation of the surrounding circuit assumptions.
 
 Source: [`MemCell.cpp`](https://github.com/neurosim/NS-Cache/blob/main/src/MemCell.cpp), [`AOSFETCompactModel.cpp`](https://github.com/neurosim/NS-Cache/blob/main/src/AOSFETCompactModel.cpp), and [`Mat.cpp`](https://github.com/neurosim/NS-Cache/blob/main/src/Mat.cpp); see [source tabulated ownership](../references.md#ns-cache).
