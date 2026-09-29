@@ -1,4 +1,9 @@
 # NeuroSim (NS)-Cache: An Early Exploration tool for FinFET and Nanosheet Generation Cache Memories 
+
+## Documentation: [Read the Docs Page!](https://neurosimns-cache.readthedocs.io/en/latest/)
+
+## About This Repository
+
 <p>
   <img src="./icon/neurosim_logo.png" alt="Logo" width="200" align="left" style="margin-right: 20px;" />
 </p>
@@ -11,9 +16,6 @@ module are inherited from NeuroSim V1.4 [6]. The model is made publicly availabl
 Copyright of the model is maintained by the developers, and the model is distributed under the terms of the 
 [Creative Commons Attribution-NonCommercial 4.0 International Public License](http://creativecommons.org/licenses/by-nc/4.0/legalcode).
 
-
-
-**Documentation: [Read the Docs Page! (Currently a WIP)](https://neurosimns-cache.readthedocs.io/en/latest/).**
 
 <br clear="left"/>
 If you use the tool or adapt the tool in your work or publication, please cite the following reference:
