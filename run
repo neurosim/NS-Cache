@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# Run one edited lab configuration and preserve the input and raw simulator output.
+# Compatible with the Bash 3.2 shipped by macOS and with Bash on Linux/WSL.
+set -u
+set -o pipefail
+
+usage() {
+    cat <<'HELP'
+Usage: ./run QUESTION CASE-LABEL
+       ./run --help
+
+Edit the configuration first. CASE-LABEL names the result; it does not select
+settings or change the configuration. Use 1-48 letters, digits, hyphens, or
+underscores, beginning with a letter or digit (for example, case-a).
+
+Simulation questions and configuration files in lab/configs/:
+  q01, q01-bank                     q01-bank.cfg
+  q01-mat, q02, q01-q03-mat        q01-q03-mat.cfg
+  q04, q04-q05-partition           q04-q05-partition.cfg
+  q06, q06-q07-memory              q06-q07-memory.cfg
+  q09, q09-transfer                q09-transfer.cfg
+  q10, q10-q11-repeaters           q10-q11-repeaters.cfg
+
+Analysis questions q03, q05, q07, q08, q11, and q12 print guidance without
+running a simulation. They do not require a case label.
+
+Each simulation creates a unique directory under results/<question>/ with:
+  config.cfg    Configuration snapshot actually passed to NS-Cache
+  raw.log       Unfiltered simulator stdout and stderr, also shown on screen
+  revision.txt  Full Git commit, working-tree status, and input provenance
+
+Examples:
+  ./run q01-bank baseline
+  ./run q02 case-b
+  ./run q04 case-a
+HELP
+}
+
+fail() {
+    printf 'run: %s\n' "$*" >&2
+    exit 1
+}
+
+if [ "$#" -eq 1 ] && [ "$1" = '--help' ]; then
+    usage
+    exit 0
+fi
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    usage >&2
+    exit 2
+fi
+
+question=$1
+case "$question" in
+    q01|q01-bank) group=q01-bank; config_name=q01-bank.cfg ;;
+    q01-mat|q02|q01-q03-mat) group=q01-mat; config_name=q01-q03-mat.cfg ;;
+    q04|q04-q05-partition) group=q04; config_name=q04-q05-partition.cfg ;;
+    q06|q06-q07-memory) group=q06; config_name=q06-q07-memory.cfg ;;
+    q09|q09-transfer) group=q09; config_name=q09-transfer.cfg ;;
+    q10|q10-q11-repeaters) group=q10; config_name=q10-q11-repeaters.cfg ;;
+    q03)
+        printf 'Q03 uses the mat runs from Q01 (cases A-C). Reuse their raw logs for the area calculations; no new simulation is needed.\n'
+        exit 0 ;;
+    q05)
+        printf 'Q05 uses the Q04 partitioning runs. Reuse their raw logs to calculate cycle times and bandwidth; no new simulation is needed.\n'
+        exit 0 ;;
+    q07)
+        printf 'Q07 uses the Q06 SRAM/MRAM results for the pulse-duration calculation; no new simulation is needed.\n'
+        exit 0 ;;
+    q08)
+        printf 'Q08 uses the supplied cache parameters and scheduling rules for bus-width and timing calculations; no simulation is needed.\n'
+        exit 0 ;;
+    q11)
+        printf 'Q11 uses the Q10 runs with and without repeaters. Reuse their raw logs for the speedup and bandwidth comparison; no new simulation is needed.\n'
+        exit 0 ;;
+    q12)
+        printf 'Q12 is a circuit-reasoning question about local wordlines and bitlines; no simulation is needed.\n'
+        exit 0 ;;
+    *)
+        printf 'run: unknown question: %s\nUse ./run --help for supported questions.\n' "$question" >&2
+        exit 2 ;;
+esac
+
+if [ "$#" -ne 2 ]; then
+    printf 'run: provide a case label, for example: ./run %s case-a\n' "$question" >&2
+    exit 2
+fi
+label=$2
+case "$label" in
+    ''|[!a-zA-Z0-9]*|*[!a-zA-Z0-9_-]*)
+        printf 'run: case label must start with a letter or digit and contain only letters, digits, hyphens, or underscores.\n' >&2
+        exit 2 ;;
+esac
+if [ "${#label}" -gt 48 ]; then
+    printf 'run: case label must be at most 48 characters.\n' >&2
+    exit 2
+fi
+
+root=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd) || fail 'cannot locate the repository root.'
+cd "$root" || fail 'cannot enter the repository root.'
+config="lab/configs/$config_name"
+[ -f "$config" ] && [ -r "$config" ] || fail "configuration is missing or unreadable: $config"
+[ -f ./nsc ] && [ -x ./nsc ] || fail 'NS-Cache is not built. From the repository root, run: make -C src -j2'
+revision=$(git rev-parse --verify HEAD) || fail 'cannot read the Git revision.'
+git_status=$(git status --short --untracked-files=all) || fail 'cannot read the Git working-tree status.'
+started=$(date -u '+%Y%m%dT%H%M%SZ') || fail 'cannot read the current time.'
+mkdir -p "results/$group" || fail 'cannot create the results directory.'
+run_dir=$(mktemp -d "$root/results/$group/$label-$started-XXXXXX") || fail 'cannot create a unique run directory.'
+cp "$config" "$run_dir/config.cfg" || fail "cannot snapshot the configuration into $run_dir"
+{
+    printf 'Commit: %s\nStarted UTC: %s\nQuestion: %s\nSource configuration: %s\n' "$revision" "$started" "$question" "$config"
+    printf 'Executed configuration: %s/config.cfg\nRepository root: %s\n' "$run_dir" "$root"
+    printf '\nGit status at launch (short format, including untracked files):\n'
+    if [ -n "$git_status" ]; then
+        printf '%s\n' "$git_status"
+    else
+        printf '(clean)\n'
+    fi
+} > "$run_dir/revision.txt" || fail "cannot save revision provenance in $run_dir"
+
+printf 'Running %s with the configuration snapshot in:\n%s\n\n' "$question" "$run_dir"
+./nsc "$run_dir/config.cfg" 2>&1 | tee "$run_dir/raw.log"
+pipeline_status=("${PIPESTATUS[@]}")
+if [ "${pipeline_status[0]}" -ne 0 ]; then
+    printf '\nrun: NS-Cache exited with status %s. Saved files: %s\n' "${pipeline_status[0]}" "$run_dir" >&2
+    exit "${pipeline_status[0]}"
+fi
+if [ "${pipeline_status[1]}" -ne 0 ]; then
+    printf '\nrun: tee could not save or display the complete log. Saved files: %s\n' "$run_dir" >&2
+    exit "${pipeline_status[1]}"
+fi
+
+# Check completion markers only; leave all measurements in the original raw log.
+if ! awk '
+    tolower($0) ~ /no valid solutions/ { invalid = 1 }
+    /numSolutions[[:space:]]*=/ {
+        summary = $0
+        sub(/^.*numSolutions[[:space:]]*=[[:space:]]*/, "", summary)
+        solutions = summary + 0
+    }
+    {
+        if ($0 ~ /^[[:space:]]*=+[[:space:]]*$/) {
+            if (expect_result_separator) result = 1
+            previous_separator = 1
+            expect_result_separator = 0
+        } else {
+            expect_result_separator = previous_separator && $0 ~ /^[[:space:]]*RESULT[[:space:]]*$/
+            previous_separator = 0
+        }
+    }
+    END { exit (invalid || !result || !(solutions > 0)) }
+' "$run_dir/raw.log"; then
+    printf '\nrun: no verified valid result. The log must contain a positive numSolutions count and a RESULT block, with no "No valid solutions" message.\nSaved files: %s\n' "$run_dir" >&2
+    exit 1
+fi
+printf '\nValid result saved in %s\n' "$run_dir"

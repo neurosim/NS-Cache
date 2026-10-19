@@ -980,7 +980,7 @@ void Wire::PrintProperty() {
 		}
 		cout << endl;
 		cout << "Wire Resistance: " << resWirePerUnit / 1e6 << "ohm/um" << endl;
-		cout << "Wire Capacitance: " << capWirePerUnit / 1e6 << "F/um" << endl;
+		cout << "Wire Capacitance: " << capWirePerUnit * 1e9 << "fF/um" << endl;
 	} else {
 		cout << "Wire type: active (with repeaters)" << endl;
 		cout << "Repeater Size: " << repeaterSize << endl;

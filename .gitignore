@@ -11,3 +11,10 @@
 /site/
 /CSA-handoff/
 *.pyc
+/results/
+.DS_Store
+__pycache__/
+
+# Course documents are distributed separately.
+/lab/*.pdf
+/lab/*.docx
