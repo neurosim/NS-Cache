@@ -14,14 +14,14 @@ settings or change the configuration. Use 1-48 letters, digits, hyphens, or
 underscores, beginning with a letter or digit (for example, case-a).
 
 Simulation questions and configuration files in lab/configs/:
-  q01, q01-bank                     q01-bank.cfg
-  q01-mat, q02, q01-q03-mat        q01-q03-mat.cfg
-  q04, q04-q05-partition           q04-q05-partition.cfg
-  q06, q06-q07-memory              q06-q07-memory.cfg
-  q09, q09-transfer                q09-transfer.cfg
-  q10, q10-q11-repeaters           q10-q11-repeaters.cfg
+  baseline, baseline-bank        baseline-bank.cfg (installation check)
+  q01, q01-mat, q02, q01-q02-mat  q01-q02-mat.cfg
+  q03, q03-q04-partition          q03-q04-partition.cfg
+  q05, q05-q06-memory             q05-q06-memory.cfg
+  q08, q08-transfer               q08-transfer.cfg
+  q09, q09-q10-repeaters          q09-q10-repeaters.cfg
 
-Analysis questions q03, q05, q07, q08, q11, and q12 print guidance without
+Analysis questions q04, q06, q07, q10, and q11 print guidance without
 running a simulation. They do not require a case label.
 
 Each simulation creates a unique directory under results/<question>/ with:
@@ -30,9 +30,9 @@ Each simulation creates a unique directory under results/<question>/ with:
   revision.txt  Full Git commit, working-tree status, and input provenance
 
 Examples:
-  ./run q01-bank baseline
+  ./run baseline check
   ./run q02 case-b
-  ./run q04 case-a
+  ./run q03 case-a
 HELP
 }
 
@@ -52,29 +52,26 @@ fi
 
 question=$1
 case "$question" in
-    q01|q01-bank) group=q01-bank; config_name=q01-bank.cfg ;;
-    q01-mat|q02|q01-q03-mat) group=q01-mat; config_name=q01-q03-mat.cfg ;;
-    q04|q04-q05-partition) group=q04; config_name=q04-q05-partition.cfg ;;
-    q06|q06-q07-memory) group=q06; config_name=q06-q07-memory.cfg ;;
-    q09|q09-transfer) group=q09; config_name=q09-transfer.cfg ;;
-    q10|q10-q11-repeaters) group=q10; config_name=q10-q11-repeaters.cfg ;;
-    q03)
-        printf 'Q03 uses the mat runs from Q01 (cases A-C). Reuse their raw logs for the area calculations; no new simulation is needed.\n'
+    baseline|baseline-bank) group=baseline; config_name=baseline-bank.cfg ;;
+    q01|q01-mat|q02|q01-q02-mat) group=q01-mat; config_name=q01-q02-mat.cfg ;;
+    q03|q03-q04-partition) group=q03; config_name=q03-q04-partition.cfg ;;
+    q05|q05-q06-memory) group=q05; config_name=q05-q06-memory.cfg ;;
+    q08|q08-transfer) group=q08; config_name=q08-transfer.cfg ;;
+    q09|q09-q10-repeaters) group=q09; config_name=q09-q10-repeaters.cfg ;;
+    q04)
+        printf 'Q04 uses the Q03 partitioning runs. Reuse their raw logs to calculate cycle times and bandwidth; no new simulation is needed.\n'
         exit 0 ;;
-    q05)
-        printf 'Q05 uses the Q04 partitioning runs. Reuse their raw logs to calculate cycle times and bandwidth; no new simulation is needed.\n'
+    q06)
+        printf 'Q06 uses the Q05 SRAM/MRAM results for the pulse-duration calculation; no new simulation is needed.\n'
         exit 0 ;;
     q07)
-        printf 'Q07 uses the Q06 SRAM/MRAM results for the pulse-duration calculation; no new simulation is needed.\n'
+        printf 'Q07 uses the supplied cache parameters and scheduling rules for bus-width and timing calculations; no simulation is needed.\n'
         exit 0 ;;
-    q08)
-        printf 'Q08 uses the supplied cache parameters and scheduling rules for bus-width and timing calculations; no simulation is needed.\n'
+    q10)
+        printf 'Q10 refers to the Q09 runs with and without repeaters for the bank-speedup derivation; no new simulation is needed.\n'
         exit 0 ;;
     q11)
-        printf 'Q11 uses the Q10 runs with and without repeaters. Reuse their raw logs for the speedup and bandwidth comparison; no new simulation is needed.\n'
-        exit 0 ;;
-    q12)
-        printf 'Q12 is a circuit-reasoning question about local wordlines and bitlines; no simulation is needed.\n'
+        printf 'Q11 is a circuit-reasoning question about local wordlines and bitlines; no simulation is needed.\n'
         exit 0 ;;
     *)
         printf 'run: unknown question: %s\nUse ./run --help for supported questions.\n' "$question" >&2

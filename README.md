@@ -11,7 +11,7 @@ git clone --depth 1 --single-branch --branch student-lab https://github.com/neur
 cd NS-Cache
 git rev-parse HEAD
 make -C src -j2
-./run q01 baseline
+./run baseline check
 ```
 
 Record the full commit identifier printed above in your report and keep the revision assigned by your instructor, changing only the assigned configuration entries. Update only if instructed.
@@ -24,16 +24,16 @@ Each configuration is complete and ready to run. Edit only its marked block, usi
 
 | Questions | Configuration | Editable lines | Example command |
 | --- | --- | ---: | --- |
-| Q1 bank baseline | [q01-bank.cfg](lab/configs/q01-bank.cfg) | 0 | `./run q01 baseline` |
-| Q1–3 mat experiments | [q01-q03-mat.cfg](lab/configs/q01-q03-mat.cfg) | 3 mux factors | `./run q01-mat a` |
-| Q4–5 partitioning | [q04-q05-partition.cfg](lab/configs/q04-q05-partition.cfg) | 1 bank-organization entry | `./run q04 case-a` |
-| Q6–7 memory comparison | [q06-q07-memory.cfg](lab/configs/q06-q07-memory.cfg) | 1 cell-file entry | `./run q06 sram` |
-| Q9 transfer width | [q09-transfer.cfg](lab/configs/q09-transfer.cfg) | 2 width/mux entries | `./run q09 128` |
-| Q10–11 repeaters | [q10-q11-repeaters.cfg](lab/configs/q10-q11-repeaters.cfg) | 1 global-repeater entry | `./run q10 none` |
+| Installation check | [baseline-bank.cfg](lab/configs/baseline-bank.cfg) | 0 | `./run baseline check` |
+| Q1–2 mat experiments | [q01-q02-mat.cfg](lab/configs/q01-q02-mat.cfg) | 3 mux factors | `./run q01 a` |
+| Q3–4 partitioning | [q03-q04-partition.cfg](lab/configs/q03-q04-partition.cfg) | 1 bank-organization entry | `./run q03 case-a` |
+| Q5–6 memory comparison | [q05-q06-memory.cfg](lab/configs/q05-q06-memory.cfg) | 1 cell-file entry | `./run q05 sram` |
+| Q8 transfer width | [q08-transfer.cfg](lab/configs/q08-transfer.cfg) | 2 width/mux entries | `./run q08 128` |
+| Q9–10 repeaters | [q09-q10-repeaters.cfg](lab/configs/q09-q10-repeaters.cfg) | 1 global-repeater entry | `./run q09 none` |
 
 **The final argument labels the result. ** For example, `./run q02 d` uses the mat configuration as currently saved; it does not select case D. Edit the configuration first, then give the run a descriptive label.
 
-Q3, Q5, Q7, and Q11 reuse earlier results. Q8 and Q12 require no additional simulation. The supplied cell definitions are [SRAM](lab/cells/SRAM_cell_14nm.cell) and [STT-MRAM](lab/cells/sample_STTRAM.cell); their parameters remain fixed for this lab.
+Q4 and Q6 reuse the Q3 and Q5 results, respectively. Q10 refers to the Q9 repeater runs. Q7 and Q11 require no simulation. The supplied cell definitions are [SRAM](lab/cells/SRAM_cell_14nm.cell) and [STT-MRAM](lab/cells/sample_STTRAM.cell); their parameters remain fixed for this lab.
 
 Each run creates a unique folder under `results/` containing:
 
@@ -44,7 +44,7 @@ Each run creates a unique folder under `results/` containing:
 Keep these files with your calculations and plots. The helper runs from any working directory when invoked by its path; the examples above assume the repository root. Use `./run --help` for supported questions. 
 
 ```bash
-./nsc lab/configs/q01-bank.cfg
+./nsc lab/configs/baseline-bank.cfg
 ```
 
 ## Model and attribution
