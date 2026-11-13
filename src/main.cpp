@@ -156,18 +156,31 @@ void tsvVerif(InputParameter *inputParameter)
 int main(int argc, char *argv[])
 {
 	cout << fixed << setprecision(3);
-	string inputFileName;
+	string inputFileName = "nvsim.cfg";
+	bool verbose = false;
+	bool hasInputFile = false;
 
-	if (argc == 1) {
-		inputFileName = "nvsim.cfg";
-		cout << "Default configuration file (nvsim.cfg) is loaded" << endl;
-	} else {
-		inputFileName = argv[1];
-		cout << "User-defined configuration file (" << inputFileName << ") is loaded" << endl;
+	for (int i = 1; i < argc; ++i) {
+		const string arg = argv[i];
+
+		if (arg == "--verbose" || arg == "verbose") {
+			verbose = true;
+		} else if (!hasInputFile && !arg.empty() && arg[0] != '-') {
+			inputFileName = arg;
+			hasInputFile = true;
+		} else {
+			cerr << "Usage: " << argv[0]
+				<< " [config.cfg] [--verbose]" << endl;
+			return 1;
+		}
 	}
-	cout << endl;
+
+	cout << (hasInputFile ? "User-defined" : "Default")
+		<< " configuration file (" << inputFileName << ") is loaded"
+		<< endl << endl;
 
 	inputParameter = new InputParameter();
+	inputParameter->verbose = verbose;
 	RESTORE_SEARCH_SIZE;
 	inputParameter->ReadInputParameterFromFile(inputFileName);
 

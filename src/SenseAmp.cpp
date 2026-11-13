@@ -51,7 +51,9 @@ void SenseAmp::Initialize(long long _numColumn, bool _currentSense, double _sens
 	if (currentSense) {
 		binaryResult = EvaluateBinarySenseAmp(binaryOperatingPoint, *tech, numColumn);
 		if (binaryResult.status == BinarySenseAmpStatus::Invalid) {
-			cout << "[Sense Amp] Error: " << binaryResult.reason << endl;
+			if (inputParameter->verbose) {
+				cout << "[Sense Amp] Error: " << binaryResult.reason << endl;
+			}
 			invalid = true;
 		}
 	}

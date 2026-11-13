@@ -39,6 +39,7 @@ public:
 	void PrintInputParameter();
 
 	/* Properties */
+	bool verbose;  /* Print rejected-candidate diagnostics and values */
 	DesignTarget designTarget;		/* Cache, RAM, or CAM */
 	OptimizationTarget optimizationTarget;	/* Either latency, energy, EDP, bandwidth, leakage, or area */
 	int processNode;				/* Process node (nm) */
