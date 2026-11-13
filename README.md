@@ -61,7 +61,12 @@ make -C src/
 // Example: ./nsc config/New_Configs/SRAM_cache_14nm.cfg
 ```
 
-(4) To clean, use:
+(4) Use the --verbose flag to enable detailed error messages during design optimization. For example:
+```
+./nsc <configuration_file> --verbose
+```
+
+(5) To clean, use:
 ```
 make clean -C src/
 ```
