@@ -131,6 +131,7 @@ bool ParseStrictMatSize(const std::string & value, uint64_t *rows, uint64_t *col
 
 InputParameter::InputParameter() {
 	// TODO Auto-generated constructor stub
+	verbose = false;
 	designTarget = cache;
 	optimizationTarget = read_latency_optimized;
 	processNode = 90;

@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
+#include <sstream>
 
 namespace {
 
@@ -92,13 +93,26 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 
 	if (numRow <= 0 || numColumn <= 0 || muxSenseAmp <= 0 || muxOutputLev1 <= 0
 			|| muxOutputLev2 <= 0 || num3DLevels <= 0) {
-		cout << "[Mat] Error: Row, column, mux, and level counts must be positive." << endl;
+		if (inputParameter->verbose) {
+			std::ostringstream message;
+			message << std::scientific
+					<< "[Mat] Error: Row, column, mux, and level counts must be positive."
+					<< " muxSenseAmp=" << muxSenseAmp
+					<< ", muxOutputLev1=" << muxOutputLev1
+					<< ", muxOutputLev2=" << muxOutputLev2
+					<< ", numRow=" << numRow
+					<< ", numColumn=" << numColumn
+					<< ", num3DLevels=" << num3DLevels;
+			cout << message.str() << endl;
+		}
 		invalid = true;
 		initialized = true;
 		return;
 	}
 	if (cell->memCellType == MLCNAND) {
-		cout << "[Mat] Error: MLC NAND modeling is unfinished and is not a valid exploration path." << endl;
+		if (inputParameter->verbose) {
+			cout << "[Mat] Error: MLC NAND modeling is unfinished and is not a valid exploration path." << endl;
+		}
 		invalid = true;
 		initialized = true;
 		return;
@@ -232,7 +246,9 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 			voltageSense = true;
 		}
 	} else if (cell->memCellType == DRAM || cell->memCellType == eDRAM || cell->memCellType == gcDRAM) { /* Write Access Destruction */
-		cout << "[Mat] Error: DRAM does not support external sense amplifiers!" << endl;
+		if (inputParameter->verbose) {
+			cout << "[Mat] Error: DRAM does not support external sense amplifiers!" << endl;
+		}
 		invalid = true;
 		initialized = true;
 		return;
@@ -428,7 +444,15 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 				voltageMemCellOff = cell->readCurrent * resMemCellOff;
 				voltageMemCellOn = cell->readCurrent * resMemCellOn;
 				if ((voltagePrecharge - voltageMemCellOn) <= senseVoltage) {
-					cout <<"Error[Mat]: Read current too large or too small that no reasonable precharge voltage existing" <<endl;
+					if (inputParameter->verbose) {
+						std::ostringstream message;
+						message << std::scientific
+							<< "[Mat] Error: Read current too large or too small that no reasonable precharge voltage existing"
+							<< ", voltagePrecharge=" << voltagePrecharge << " V"
+							<< ", voltageMemCellOn=" << voltageMemCellOn << " V"
+							<< ", senseVoltage=" << senseVoltage << " V";
+						cout << message.str() << endl;
+					}
 					invalid = true;
 					return;
 				}
@@ -439,7 +463,15 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 				voltageMemCellOff = cell->readVoltage * resMemCellOff / (resMemCellOff + resInSerialForSenseAmp);
 				voltageMemCellOn = cell->readVoltage * resMemCellOn / (resMemCellOn + resInSerialForSenseAmp);
 				if ((voltagePrecharge - voltageMemCellOn) <= senseVoltage) {
-					cout <<"Error[Mat]: Read Voltage too large or too small that no reasonable precharge voltage existing" <<endl;
+					if (inputParameter->verbose) {
+						std::ostringstream message;
+						message << std::scientific
+							<< "[Mat] Error: Read Voltage too large or too small that no reasonable precharge voltage existing"
+							<< ", voltagePrecharge=" << voltagePrecharge << " V"
+							<< ", voltageMemCellOn=" << voltageMemCellOn << " V"
+							<< ", senseVoltage=" << senseVoltage << " V";
+						cout << message.str() << endl;
+					}
 					invalid = true;
 					return;
 				}
@@ -460,7 +492,15 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 				voltagePrecharge = (voltageMemCellOff + voltageMemCellOn) / 2;
 				voltagePrecharge = MIN(tech->vdd, voltagePrecharge);  /* TO-DO: we can have charge bump to increase SA working point */
 				if ((voltagePrecharge - voltageMemCellOn) <= senseVoltage) {
-					cout <<"Error[Mat]: Read current too large or too small that no reasonable precharge voltage existing" <<endl;
+					if (inputParameter->verbose) {
+						std::ostringstream message;
+						message << std::scientific
+							<< "[Mat] Error: Read current too large or too small that no reasonable precharge voltage existing"
+							<< ", voltagePrecharge=" << voltagePrecharge << " V"
+							<< ", voltageMemCellOn=" << voltageMemCellOn << " V"
+							<< ", senseVoltage=" << senseVoltage << " V";
+						cout << message.str() << endl;
+					}
 					invalid = true;
 					return;
 				}
@@ -473,7 +513,15 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 				voltagePrecharge = (voltageMemCellOff + voltageMemCellOn) / 2;
 				voltagePrecharge = MIN(tech->vdd, voltagePrecharge);  /* TO-DO: we can have charge bump to increase SA working point */
 				if ((voltagePrecharge - voltageMemCellOn) <= senseVoltage) {
-					cout <<"Error[Mat]: Read Voltage too large or too small that no reasonable precharge voltage existing" <<endl;
+					if (inputParameter->verbose) {
+						std::ostringstream message;
+						message << std::scientific
+							<< "[Mat] Error: Read Voltage too large or too small that no reasonable precharge voltage existing"
+							<< ", voltagePrecharge=" << voltagePrecharge << " V"
+							<< ", voltageMemCellOn=" << voltageMemCellOn << " V"
+							<< ", senseVoltage=" << senseVoltage << " V";
+						cout << message.str() << endl;
+					}
 					invalid = true;
 					return;
 				}
@@ -523,7 +571,15 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 				voltagePrecharge = (voltageMemCellOff + voltageMemCellOn) / 2;
 				voltagePrecharge = MIN(tech->vdd, voltagePrecharge);  /* TO-DO: we can have charge bump to increase SA working point */
 				if ((voltagePrecharge - voltageMemCellOn) <= senseVoltage) {
-					cout <<"Error[Mat]: Read current too large or too small that no reasonable precharge voltage existing" <<endl;
+					if (inputParameter->verbose) {
+						std::ostringstream message;
+						message << std::scientific
+							<< "[Mat] Error: Read current too large or too small that no reasonable precharge voltage existing"
+							<< ", voltagePrecharge=" << voltagePrecharge << " V"
+							<< ", voltageMemCellOn=" << voltageMemCellOn << " V"
+							<< ", senseVoltage=" << senseVoltage << " V";
+						cout << message.str() << endl;
+					}
 					invalid = true;
 					return;
 				}
@@ -536,7 +592,15 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 				voltagePrecharge = (voltageMemCellOff + voltageMemCellOn) / 2;
 				voltagePrecharge = MIN(tech->vdd, voltagePrecharge);  /* TO-DO: we can have charge bump to increase SA working point */
 				if ((voltagePrecharge - voltageMemCellOn) <= senseVoltage) {
-					cout <<"Error[Mat]: Read Voltage too large or too small that no reasonable precharge voltage existing" <<endl;
+					if (inputParameter->verbose) {
+						std::ostringstream message;
+						message << std::scientific
+							<< "[Mat] Error: Read Voltage too large or too small that no reasonable precharge voltage existing"
+							<< ", voltagePrecharge=" << voltagePrecharge << " V"
+							<< ", voltageMemCellOn=" << voltageMemCellOn << " V"
+							<< ", senseVoltage=" << senseVoltage << " V";
+						cout << message.str() << endl;
+					}
 					invalid = true;
 					return;
 				}
@@ -553,7 +617,9 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 		capBitline  += capCellAccess * (numRow / pageCount) / 2;	/* 2 is due to shared contact and the effective row count is numRow/pageCount */
 		voltagePrecharge = tech->vdd * 0.6;	/* SLC NAND flash bitline precharge voltage is assumed to 0.6Vdd */
 	} else {
-		cout << "[Mat] Error: Unsupported memory-cell type in precharge/access modeling." << endl;
+		if (inputParameter->verbose) {
+			cout << "[Mat] Error: Unsupported memory-cell type in precharge/access modeling." << endl;
+		}
 		invalid = true;
 		initialized = true;
 		return;
@@ -562,7 +628,14 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 	if (cell->memCellType == DRAM || cell->memCellType == eDRAM) {
 		const double sharingCap = cell->capDRAMCell + capBitline;
 		if (!IsFinitePositive(cell->capDRAMCell) || !IsFinitePositive(sharingCap)) {
-			cout << "[Mat] Error: DRAM charge-sharing capacitances must be finite and positive." << endl;
+			if (inputParameter->verbose) {
+				std::ostringstream message;
+				message << std::scientific
+						<< "[Mat] Error: DRAM charge-sharing capacitances must be finite and positive."
+						<< " capDRAMCell=" << cell->capDRAMCell << " F"
+						<< ", sharingCap=" << sharingCap << " F";
+				cout << message.str() << endl;
+			}
 			invalid = true;
 			initialized = true;
 			return;
@@ -622,10 +695,61 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 	/* Historically every path passed capBitlineRead, although only gcDRAM
 	 * initializes it. Resolve the actual modeled voltage and read-bitline load. */
 	const double prechargerBitlineCap = (cell->memCellType == gcDRAM) ? capBitlineRead : capBitline;
-	if (!IsFinitePositive(voltagePrecharge) || !IsFinitePositive(prechargerBitlineCap)
-			|| !IsFiniteNonNegative(resBitline) || !IsFiniteNonNegative(lenBitline)
-			|| numColumn > std::numeric_limits<int>::max()) {
-		cout << "[Mat] Error: Invalid precharger voltage, capacitance, resistance, length, or column count." << endl;
+	if (!IsFinitePositive(voltagePrecharge)) {
+		if (inputParameter->verbose) {
+			std::ostringstream message;
+			message << std::scientific
+					<< "[Mat] Error: Invalid precharger voltage: "
+					<< voltagePrecharge << " V";
+			cout << message.str() << endl;
+		}
+		invalid = true;
+		initialized = true;
+		return;
+	}
+	if (!IsFinitePositive(prechargerBitlineCap)) {
+		if (inputParameter->verbose) {
+			std::ostringstream message;
+			message << std::scientific
+					<< "[Mat] Error: Invalid precharger bitline capacitance: "
+					<< prechargerBitlineCap << " F";
+			cout << message.str() << endl;
+		}
+		invalid = true;
+		initialized = true;
+		return;
+	}
+	if (!IsFiniteNonNegative(resBitline)) {
+		if (inputParameter->verbose) {
+			std::ostringstream message;
+			message << std::scientific
+					<< "[Mat] Error: Invalid bitline resistance: "
+					<< resBitline << " ohm";
+			cout << message.str() << endl;
+		}
+		invalid = true;
+		initialized = true;
+		return;
+	}
+	if (!IsFiniteNonNegative(lenBitline)) {
+		if (inputParameter->verbose) {
+			std::ostringstream message;
+			message << std::scientific
+					<< "[Mat] Error: Invalid bitline length."
+					<< " lenBitline=" << lenBitline << " m"
+					<< ", numRow=" << numRow
+					<< ", numColumn=" << numColumn
+					<< ", num3DLevels=" << num3DLevels;
+			cout << message.str() << endl;
+		}
+		invalid = true;
+		initialized = true;
+		return;
+	}
+	if (numColumn > std::numeric_limits<int>::max()) {
+		if (inputParameter->verbose) {
+			cout << "[Mat] Error: Column count exceeds INT_MAX: " << numColumn << endl;
+		}
 		invalid = true;
 		initialized = true;
 		return;
@@ -718,7 +842,17 @@ void Mat::Initialize(long long _numRow, long long _numColumn, bool _multipleRowP
 		if (!IsFinitePositive(tech->vdd) || !IsFinitePositive(capBitline)
 				|| !IsFiniteNonNegative(resBitline) || !IsFiniteNonNegative(lenBitline)
 				|| numColumn <= 0 || numColumn > std::numeric_limits<int>::max()) {
-			cout << "[Mat] Error: Invalid gcDRAM write-driver voltage, capacitance, resistance, length, or column count." << endl;
+			if (inputParameter->verbose) {
+				std::ostringstream message;
+				message << std::scientific
+						<< "[Mat] Error: Invalid gcDRAM write-driver voltage, capacitance, resistance, length, or column count."
+						<< " vdd=" << tech->vdd << " V"
+						<< ", capBitline=" << capBitline << " F"
+						<< ", resBitline=" << resBitline << " ohm"
+						<< ", lenBitline=" << lenBitline << " m"
+						<< ", numColumn=" << numColumn;
+				cout << message.str() << endl;
+			}
 			invalid = true;
 			initialized = true;
 			return;
@@ -848,7 +982,12 @@ void Mat::CalculateArea() {
 					|| scaledMivs <= 0
 					|| scaledMivs > std::numeric_limits<int>::max()
 					|| inputParameter->maxMatLayers <= 0) {
-				cout << "[Mat] Error: M3D MIV count or tier limit is outside the supported range." << endl;
+				if (inputParameter->verbose) {
+					cout << "[Mat] Error: M3D MIV count or tier limit is outside the supported range. "
+						<< " redundancyFactor=" << redundancyFactor
+						<< ", scaledMivs=" << scaledMivs
+						<< ", maxMatLayers=" << inputParameter->maxMatLayers << endl;
+				}
 				invalid = true;
 				height = width = area = invalid_value;
 				return;
@@ -1129,7 +1268,14 @@ void Mat::CalculateLatency(double _rampInput) {
 					/ (capCellAccess + cell->capDRAMCell + capBitline + bitlineMux.capForPreviousDelayCalculation);
 			double res = resBitline + resCellAccess;
 			if (!IsFinitePositive(cap) || !IsFinitePositive(res)) {
-				cout << "[Mat] Error: DRAM read-path R/C must be finite and positive." << endl;
+				if (inputParameter->verbose) {
+					std::ostringstream message;
+					message << std::scientific
+						<< "[Mat] Error: DRAM read-path R/C must be finite and positive."
+						<< " cap=" << cap << " F"
+						<< ", res=" << res << " ohm";
+					cout << message.str() << endl;
+				}
 				invalid = true;
 				readLatency = writeLatency = invalid_value;
 				return;
@@ -1150,7 +1296,16 @@ void Mat::CalculateLatency(double _rampInput) {
 			if (!IsFinitePositive(writePathCap) || !IsFinitePositive(writePathResistance)
 					|| !IsFinitePositive(fullWriteSwing) || !std::isfinite(residualRatio)
 					|| residualRatio <= 0 || residualRatio >= 1) {
-				cout << "[Mat] Error: DRAM write settling requires a positive swing/R/C and residual ratio in (0,1)." << endl;
+				if (inputParameter->verbose) {
+					std::ostringstream message;
+					message << std::scientific
+						<< "[Mat] Error: DRAM write settling requires a positive swing/R/C and residual ratio in (0,1)."
+						<< " writePathCap=" << writePathCap << " F"
+						<< ", writePathResistance=" << writePathResistance << " ohm"
+						<< ", fullWriteSwing=" << fullWriteSwing << " V"
+						<< ", residualRatio=" << residualRatio;
+					cout << message.str() << endl;
+				}
 				invalid = true;
 				readLatency = writeLatency = invalid_value;
 				return;
@@ -1189,7 +1344,19 @@ void Mat::CalculateLatency(double _rampInput) {
 					|| !IsFinitePositive(dramTiming.readCycleLatency)
 					|| !IsFinitePositive(writeBitlineDelay) || !IsFinitePositive(writeLatency)
 					|| !IsFiniteNonNegative(refreshLatency)) {
-				cout << "[Mat] Error: DRAM timing produced a non-finite or negative result." << endl;
+				if (inputParameter->verbose) {
+					std::ostringstream message;
+					message << std::scientific
+						<< "[Mat] Error: DRAM timing produced a non-finite or negative result."
+						<< " bitlineDelay=" << bitlineDelay << " s"
+						<< ", restoreDelay=" << dramTiming.restoreDelay << " s"
+						<< ", accessLatency=" << dramTiming.accessLatency << " s"
+						<< ", readCycleLatency=" << dramTiming.readCycleLatency << " s"
+						<< ", writeBitlineDelay=" << writeBitlineDelay << " s"
+						<< ", writeLatency=" << writeLatency << " s"
+						<< ", refreshLatency=" << refreshLatency << " s";
+					cout << message.str() << endl;
+				}
 				invalid = true;
 				readLatency = writeLatency = invalid_value;
 				return;
@@ -1211,7 +1378,16 @@ void Mat::CalculateLatency(double _rampInput) {
 			const double writePathResistance = resBitline + resWriteCellAccess;
 			if (!IsFinitePositive(capRBL) || !IsFinitePositive(capWBL)
 					|| !IsFinitePositive(readPathResistance) || !IsFinitePositive(writePathResistance)) {
-				cout << "[Mat] Error: gcDRAM split read/write R/C must be finite and positive." << endl;
+				if (inputParameter->verbose) {
+					std::ostringstream message;
+					message << std::scientific
+						<< "[Mat] Error: gcDRAM split read/write R/C must be finite and positive."
+						<< " capRBL=" << capRBL << " F"
+						<< ", capWBL=" << capWBL << " F"
+						<< ", readPathResistance=" << readPathResistance << " ohm"
+						<< ", writePathResistance=" << writePathResistance << " ohm";
+					cout << message.str() << endl;
+				}
 				invalid = true;
 				readLatency = writeLatency = invalid_value;
 				return;
@@ -1220,7 +1396,14 @@ void Mat::CalculateLatency(double _rampInput) {
 			const double tauWBL = writePathResistance * capWBL
 					* std::log(1.0 / inputParameter->dramTargetResidualRatio);
 			if (!IsFinitePositive(tauRBL) || !IsFinitePositive(tauWBL)) {
-				cout << "[Mat] Error: gcDRAM read/write settling constants must be finite and positive." << endl;
+				if (inputParameter->verbose) {
+					std::ostringstream message;
+					message << std::scientific
+						<< "[Mat] Error: gcDRAM read/write settling constants must be finite and positive."
+						<< " tauRBL=" << tauRBL << " s"
+						<< ", tauWBL=" << tauWBL << " s";
+					cout << message.str() << endl;
+				}
 				invalid = true;
 				readLatency = writeLatency = invalid_value;
 				return;
@@ -1244,7 +1427,16 @@ void Mat::CalculateLatency(double _rampInput) {
 					|| !IsFinitePositive(availableOffSwing) || !IsFinitePositive(senseVoltage)
 					|| availableOnSwing <= senseVoltage
 					|| availableOffSwing <= senseVoltage) {
-				cout << "[Mat] Error: gcDRAM read swing is too small or invalid." << endl;
+				if (inputParameter->verbose) {
+					std::ostringstream message;
+					message << std::scientific
+						<< "[Mat] Error: gcDRAM read swing is too small or invalid."
+						<< " tau=" << tau << " s"
+						<< ", availableOnSwing=" << availableOnSwing << " V"
+						<< ", availableOffSwing=" << availableOffSwing << " V"
+						<< ", senseVoltage=" << senseVoltage << " V";
+					cout << message.str() << endl;
+				}
 				invalid = true;
 				readLatency = writeLatency = invalid_value;
 				return;
@@ -1253,7 +1445,13 @@ void Mat::CalculateLatency(double _rampInput) {
 			tau = hrs_resistance * (capReadCellAccess + capBitlineRead + bitlineMux.capForPreviousDelayCalculation)
 					+ resBitline * (bitlineMux.capForPreviousDelayCalculation + capBitlineRead / 2);  /* time constant of HRS */
 			if (!IsFinitePositive(tau)) {
-				cout << "[Mat] Error: gcDRAM HRS read time constant must be finite and positive." << endl;
+				if (inputParameter->verbose) {
+					std::ostringstream message;
+					message << std::scientific
+						<< "[Mat] Error: gcDRAM HRS read time constant must be finite and positive."
+						<< " tau=" << tau << " s";
+					cout << message.str() << endl;
+				}
 				invalid = true;
 				readLatency = writeLatency = invalid_value;
 				return;
@@ -1290,7 +1488,9 @@ void Mat::CalculateLatency(double _rampInput) {
 					chargeLatency, bitlineDelayOn, bitlineDelayOff,
 					readBitlineDelay, writeBitlineDelay, refreshLatency})
 					|| !IsFinitePositive(readLatency) || !IsFinitePositive(writeLatency)) {
-				cout << "[Mat] Error: gcDRAM timing produced a non-finite or negative component." << endl;
+				if (inputParameter->verbose) {
+					cout << "[Mat] Error: gcDRAM timing produced a non-finite or negative component." << endl;
+				}
 				invalid = true;
 				readLatency = writeLatency = invalid_value;
 				return;
@@ -1691,7 +1891,17 @@ void Mat::CalculatePower() {
 						|| !IsFiniteNonNegative(refreshDynamicEnergy)
 						|| !IsFiniteNonNegative(leakage)
 						|| !IsFiniteNonNegative(aosLeakageUpperBound))) {
-			cout << "[Mat] Error: DRAM energy or leakage produced a non-finite or negative result." << endl;
+			if (inputParameter->verbose) {
+				std::ostringstream message;
+				message << std::scientific
+					<< "[Mat] Error: DRAM energy or leakage produced a non-finite or negative result."
+					<< " readDynamicEnergy=" << readDynamicEnergy << " J"
+					<< ", writeDynamicEnergy=" << writeDynamicEnergy << " J"
+					<< ", refreshDynamicEnergy=" << refreshDynamicEnergy << " J"
+					<< ", leakage=" << leakage << " W"
+					<< ", aosLeakageUpperBound=" << aosLeakageUpperBound << " W";
+				cout << message.str() << endl;
+			}
 			invalid = true;
 			readDynamicEnergy = writeDynamicEnergy = refreshDynamicEnergy = leakage = invalid_value;
 			return;
@@ -1719,7 +1929,9 @@ void Mat::CalculatePower() {
 						senseAmpMuxLev2.readDynamicEnergy, senseAmpMuxLev2.writeDynamicEnergy,
 						senseAmpMuxLev2.leakage,
 						readDynamicEnergy, writeDynamicEnergy, refreshDynamicEnergy, leakage})) {
-			cout << "[Mat] Error: gcDRAM component energy or leakage is invalid." << endl;
+			if (inputParameter->verbose) {
+				cout << "[Mat] Error: gcDRAM component energy or leakage is invalid." << endl;
+			}
 			invalid = true;
 			readDynamicEnergy = writeDynamicEnergy = refreshDynamicEnergy = leakage = invalid_value;
 		}

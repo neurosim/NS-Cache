@@ -49,7 +49,9 @@ void BankWithoutHtree::Initialize(int _numRowSubArray, int _numColumnSubArray, l
 	if (!_internalSenseAmp) {
 		if (cell->memCellType == DRAM || cell->memCellType == eDRAM || cell->memCellType == gcDRAM) {
 			invalid = true;
-			cout << "[BankWithoutHtree] Error: DRAM does not support external sense amplification!" << endl;
+			if (inputParameter->verbose) {
+				cout << "[BankWithoutHtree] Error: DRAM does not support external sense amplification!" << endl;
+			}
 			return;
 		} else if (globalWire->wireRepeaterType != repeated_none) {
 			invalid = true;
